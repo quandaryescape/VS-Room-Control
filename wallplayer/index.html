@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wall Player</title>
+<style>
+  :root {
+    --ink: #131720;
+    --panel: #1b212c;
+    --panel-2: #171c26;
+    --line: #2b3342;
+    --text: #ede7db;
+    --dim: #8a93a5;
+    --lamp: #f2a93b;
+    --lamp-dim: #6d5322;
+    --stop: #d9634f;
+    --mono: "Cascadia Mono", Consolas, "Courier New", ui-monospace, monospace;
+    --sans: "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--ink);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    padding: 24px 28px 60px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  /* ---------- header ---------- */
+  header {
+    display: flex; align-items: baseline; justify-content: space-between;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 14px; margin-bottom: 22px;
+    flex-wrap: wrap; gap: 8px;
+  }
+  h1 {
+    font: 600 15px/1 var(--mono);
+    letter-spacing: .22em; text-transform: uppercase;
+    margin: 0;
+  }
+  h1 span { color: var(--lamp); }
+  #hoststate { font: 12px var(--mono); color: var(--dim); letter-spacing: .06em; }
+  #hoststate b { color: var(--text); font-weight: 600; }
+  #hoststate .live { color: var(--lamp); }
+
+  #warn {
+    display: none;
+    border: 1px solid var(--stop); border-radius: 8px;
+    background: rgba(217, 99, 79, .08); color: var(--text);
+    padding: 12px 16px; margin-bottom: 22px;
+    font: 13px/1.6 var(--mono);
+  }
+  #warn b { color: var(--stop); }
+
+  /* ---------- controls ---------- */
+  .controls {
+    display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+    margin-bottom: 26px;
+  }
+  .folder {
+    display: flex; flex: 1 1 340px; min-width: 260px;
+  }
+  .folder input {
+    flex: 1;
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--line); border-right: none;
+    border-radius: 6px 0 0 6px;
+    padding: 9px 12px; font: 13px var(--mono);
+    outline: none;
+  }
+  .folder input:focus { border-color: var(--lamp-dim); }
+  .folder button { border-radius: 0 6px 6px 0; }
+
+  button {
+    font: 600 13px var(--sans);
+    background: var(--panel); color: var(--text);
+    border: 1px solid var(--line); border-radius: 6px;
+    padding: 9px 16px; cursor: pointer;
+  }
+  button:hover { border-color: var(--dim); }
+  button:focus-visible { outline: 2px solid var(--lamp); outline-offset: 1px; }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: var(--lamp); border-color: var(--lamp); color: #241a06; }
+  button.primary:hover { filter: brightness(1.07); }
+  button.danger { color: var(--stop); border-color: #503028; }
+  button.danger:hover { border-color: var(--stop); }
+
+  /* ---------- screen cards (the signature) ---------- */
+  .screens {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px; margin-bottom: 34px;
+  }
+  .screen {
+    border: 1px solid var(--line); border-radius: 8px;
+    background: var(--panel); overflow: hidden;
+  }
+  .screen .frame {
+    aspect-ratio: 16 / 9;
+    background:
+      radial-gradient(120% 90% at 50% 30%, #222a38 0%, #10141c 70%);
+    display: flex; align-items: center; justify-content: center;
+    padding: 14px; position: relative;
+    border-bottom: 1px solid var(--line);
+  }
+  .screen .frame .file {
+    font: 12.5px/1.5 var(--mono);
+    text-align: center; word-break: break-all;
+    color: var(--text);
+    text-shadow: 0 0 14px rgba(242, 169, 59, .25);
+  }
+  .screen.off .frame { background: #0d1017; }
+  .screen.off .frame .file { color: #3d4452; text-shadow: none; }
+  .screen .bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 10px 8px 12px;
+  }
+  .screen .label { font: 11px var(--mono); letter-spacing: .18em; color: var(--dim); }
+  .lampdot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--lamp-dim); margin-right: 8px; vertical-align: 1px;
+  }
+  .screen.on .lampdot { background: var(--lamp); box-shadow: 0 0 8px var(--lamp); }
+  .screen .bar button { padding: 5px 12px; font-size: 12px; }
+
+  .screen.locked { border-color: var(--lamp-dim); }
+  .screen.locked .frame { border-bottom-color: var(--lamp-dim); }
+  .lockbadge {
+    font: 10px var(--mono); letter-spacing: .14em; color: var(--lamp);
+    border: 1px solid var(--lamp-dim); border-radius: 4px;
+    padding: 2px 6px; margin-left: 8px; vertical-align: 1px;
+  }
+  .screen .bar .actions { display: flex; gap: 6px; }
+
+  /* ---------- library ---------- */
+  h2 {
+    font: 600 12px var(--mono); letter-spacing: .2em; text-transform: uppercase;
+    color: var(--dim); margin: 0 0 12px;
+  }
+  h2 span { color: var(--text); }
+  .library { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .vrow {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 9px 14px; border-bottom: 1px solid var(--line);
+    background: var(--panel);
+  }
+  .vrow:nth-child(even) { background: var(--panel-2); }
+  .vrow:last-child { border-bottom: none; }
+  .vrow .name { font: 13px var(--mono); word-break: break-all; }
+  .vrow .send { display: flex; gap: 6px; flex-shrink: 0; }
+  .vrow .send button {
+    padding: 4px 10px; font: 600 12px var(--mono);
+  }
+  .vrow .send button:hover { border-color: var(--lamp); color: var(--lamp); }
+  .vrow .send button.lockbtn { color: var(--dim); }
+  .vrow .send button.lockbtn:hover { color: var(--lamp); }
+  .empty { padding: 22px 14px; color: var(--dim); font: 13px var(--mono); }
+
+  /* ---------- VS sabotage strip ---------- */
+  .vs {
+    border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2);
+    padding: 14px 16px; margin-bottom: 26px;
+  }
+  .vs-head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+    flex-wrap: wrap; margin-bottom: 12px;
+  }
+  .vs-head h2 { margin: 0; }
+  #vsState { font: 12px var(--mono); color: var(--dim); letter-spacing: .06em; }
+  #vsState.active { color: var(--stop); }
+  .vs-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .vs-row + .vs-row { margin-top: 10px; }
+  .vs-row button { padding: 7px 13px; font: 600 12px var(--mono); }
+  .vs-row button:hover { border-color: var(--lamp); color: var(--lamp); }
+  .vs-row button.restore { color: var(--lamp); border-color: var(--lamp-dim); }
+  .vs-row input {
+    flex: 1 1 220px; min-width: 160px;
+    background: var(--panel); color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 7px 11px; font: 13px var(--mono); outline: none;
+  }
+  .vs-row input:focus { border-color: var(--lamp-dim); }
+  .vs-note { font: 11.5px/1.6 var(--mono); color: var(--dim); margin-top: 10px; }
+
+  #toast {
+    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px 18px; font: 13px var(--mono);
+    opacity: 0; pointer-events: none; transition: opacity .25s;
+    max-width: 90vw;
+  }
+  #toast.show { opacity: 1; }
+  #toast.err { border-color: var(--stop); color: var(--stop); }
+  @media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Wall <span>Player</span></h1>
+  <div id="hoststate">connecting…</div>
+</header>
+
+<div id="warn"></div>
+
+<div class="controls">
+  <div class="folder">
+    <input id="folder" type="text" spellcheck="false" placeholder="C:\Videos (path on the player PC)">
+    <button id="saveFolder">Save folder</button>
+  </div>
+  <button id="start" class="primary">Start all</button>
+  <button id="stop" class="danger">Stop all</button>
+  <button id="mute"></button>
+</div>
+
+<div class="screens" id="screens"></div>
+
+<div class="vs">
+  <div class="vs-head">
+    <h2>VS Sabotage <span>· manual test</span></h2>
+    <span id="vsState">idle</span>
+  </div>
+  <div class="vs-row">
+    <button data-effect="blackout">Blackout</button>
+    <button data-effect="dim">Dim</button>
+    <button data-effect="desaturate">Desaturate</button>
+    <button data-effect="flash">Flash</button>
+    <button data-effect="glitch">Glitch</button>
+    <button data-effect="hue">Hue shift</button>
+    <button class="restore" data-effect="restore">Restore</button>
+  </div>
+  <div class="vs-row">
+    <input id="vsText" type="text" spellcheck="false" placeholder="Text to burn across all four walls">
+    <button id="vsSend">Show on walls</button>
+  </div>
+  <div class="vs-note">
+    These are the same calls the VS server makes during a sabotage. Effects last
+    15 seconds and restore themselves, so a test can never leave the walls dark.
+  </div>
+</div>
+
+<h2>Library <span id="count"></span></h2>
+<div class="library" id="library"><div class="empty">Loading…</div></div>
+
+<div id="toast"></div>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+let status = null;
+let videos = [];
+let folderDirty = false;
+
+function toast(msg, isErr) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = 'show' + (isErr ? ' err' : '');
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.className = '', 2600);
+}
+
+async function api(path, body) {
+  const opt = body !== undefined
+    ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+    : {};
+  const r = await fetch(path, opt);
+  const data = await r.json();
+  if (data.ok === false) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
+function renderScreens() {
+  const wrap = $('screens');
+  if (!status || status.screens.length === 0) {
+    wrap.innerHTML = '<div class="empty">Players are stopped. Press Start all to light the walls.</div>';
+    return;
+  }
+  wrap.innerHTML = status.screens.map(s => `
+    <div class="screen ${s.running ? 'on' : 'off'}${s.locked ? ' locked' : ''}">
+      <div class="frame"><div class="file">${
+        s.running ? (s.nowPlaying ? esc(s.nowPlaying) : 'starting…') : 'off'
+      }</div></div>
+      <div class="bar">
+        <span class="label"><span class="lampdot"></span>SCREEN ${s.index}${
+          s.locked ? '<span class="lockbadge">LOCKED</span>' : ''
+        }</span>
+        <span class="actions">${
+          s.locked
+            ? `<button data-unlock="${s.index}">Unlock</button>`
+            : `<button data-skip="${s.index}" ${s.running ? '' : 'disabled'}>Skip</button>`
+        }</span>
+      </div>
+    </div>`).join('');
+}
+
+function renderLibrary() {
+  const wrap = $('library');
+  $('count').textContent = videos.length ? '· ' + videos.length + ' videos' : '';
+  if (!videos.length) {
+    wrap.innerHTML = '<div class="empty">No videos found in this folder. Check the path above — it must exist on the player PC.</div>';
+    return;
+  }
+  const screens = status ? status.screens : [];
+  wrap.innerHTML = videos.map(v => `
+    <div class="vrow">
+      <div class="name">${esc(v)}</div>
+      <div class="send">${
+        screens.length
+          ? screens.map(s => `<button title="Play once on screen ${s.index}" data-file="${escAttr(v)}" data-screen="${s.index}" ${s.running ? '' : 'disabled'}>&rsaquo;${s.index}</button>`).join('')
+            + screens.map(s => `<button class="lockbtn" title="Lock to screen ${s.index} (loops forever)" data-lockfile="${escAttr(v)}" data-lockscreen="${s.index}" ${s.running ? '' : 'disabled'}>&#128274;${s.index}</button>`).join('')
+          : ''
+      }</div>
+    </div>`).join('');
+}
+
+function esc(s) { return s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function escAttr(s) { return esc(s).replace(/"/g, '&quot;'); }
+
+async function refresh() {
+  try {
+    status = await api('/api/status');
+    const st = $('hoststate');
+    st.innerHTML = `<b>${esc(status.hostname)}</b> · ` +
+      (status.running ? '<span class="live">&#9679; PLAYING</span>' : '&#9675; stopped');
+    if (!folderDirty) $('folder').value = status.folder;
+    $('mute').textContent = status.muted ? 'Sound: off' : 'Sound: on';
+    const warn = $('warn');
+    if (status.mpvFound === false) {
+      warn.innerHTML = '<b>mpv not found on the player PC.</b><br>'
+        + 'Put mpv.exe in the same folder as server.js (or set "mpvPath" in '
+        + 'config.json to its full location), then press Start all again.';
+      warn.style.display = 'block';
+    } else if (!status.folderOk) {
+      warn.innerHTML = '<b>Video folder not found:</b> ' + esc(status.folder)
+        + '<br>Enter a folder path that exists on the player PC and press Save folder.';
+      warn.style.display = 'block';
+    } else {
+      warn.style.display = 'none';
+    }
+    const vs = $('vsState');
+    if (status.vs && status.vs.effect) {
+      vs.textContent = status.vs.effect.toUpperCase() + ' · ' + status.vs.secondsLeft + 's left';
+      vs.className = 'active';
+    } else {
+      vs.textContent = status.vs && status.vs.tokenRequired ? 'idle · token required' : 'idle';
+      vs.className = '';
+    }
+    const vr = await api('/api/videos');
+    videos = vr.videos || [];
+    renderScreens();
+    renderLibrary();
+  } catch (e) {
+    $('hoststate').textContent = 'server unreachable';
+  }
+}
+
+$('folder').addEventListener('input', () => folderDirty = true);
+$('saveFolder').addEventListener('click', async () => {
+  try {
+    const r = await api('/api/folder', { folder: $('folder').value });
+    folderDirty = false;
+    toast(r.restarted ? 'Folder saved — players restarting' : 'Folder saved');
+    refresh();
+  } catch (e) { toast(e.message, true); }
+});
+$('start').addEventListener('click', async () => {
+  try { await api('/api/start', {}); toast('Starting players'); setTimeout(refresh, 800); }
+  catch (e) { toast(e.message, true); }
+});
+$('stop').addEventListener('click', async () => {
+  try { await api('/api/stop', {}); toast('Stopping players'); setTimeout(refresh, 800); }
+  catch (e) { toast(e.message, true); }
+});
+$('mute').addEventListener('click', async () => {
+  try { await api('/api/mute', { muted: !status.muted }); refresh(); }
+  catch (e) { toast(e.message, true); }
+});
+
+$('vsSend').addEventListener('click', async () => {
+  const text = $('vsText').value.trim();
+  if (!text) return toast('Type something first', true);
+  try { await api('/api/message', { text, seconds: 5 }); toast('Sent to all walls'); }
+  catch (e) { toast(e.message, true); }
+});
+
+document.body.addEventListener('click', async ev => {
+  const b = ev.target.closest('button');
+  if (!b) return;
+  if (b.dataset.effect !== undefined) {
+    try {
+      await api('/api/effect', { effect: b.dataset.effect, seconds: 15 });
+      toast(b.dataset.effect === 'restore' ? 'Walls restored' : b.dataset.effect + ' for 15s');
+      setTimeout(refresh, 400);
+    } catch (e) { toast(e.message, true); }
+    return;
+  }
+  if (b.dataset.skip !== undefined) {
+    try { await api('/api/skip', { screen: Number(b.dataset.skip) }); toast('Skipped screen ' + b.dataset.skip); setTimeout(refresh, 600); }
+    catch (e) { toast(e.message, true); }
+  } else if (b.dataset.unlock !== undefined) {
+    try { await api('/api/unlock', { screen: Number(b.dataset.unlock) }); toast('Screen ' + b.dataset.unlock + ' unlocked — back to shuffle after this video'); setTimeout(refresh, 600); }
+    catch (e) { toast(e.message, true); }
+  } else if (b.dataset.lockfile !== undefined) {
+    try {
+      await api('/api/lock', { screen: Number(b.dataset.lockscreen), file: b.dataset.lockfile });
+      toast(b.dataset.lockfile + ' locked to screen ' + b.dataset.lockscreen);
+      setTimeout(refresh, 600);
+    } catch (e) { toast(e.message, true); }
+  } else if (b.dataset.file !== undefined) {
+    try {
+      await api('/api/play', { screen: Number(b.dataset.screen), file: b.dataset.file });
+      toast(b.dataset.file + ' → screen ' + b.dataset.screen);
+      setTimeout(refresh, 600);
+    } catch (e) { toast(e.message, true); }
+  }
+});
+
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>

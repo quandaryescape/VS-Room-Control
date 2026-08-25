@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>VS Table</title>
+<link rel="stylesheet" href="table.css">
+</head>
+<body class="booting">
+
+<!-- ============ BOOT / audio unlock ============ -->
+<section id="boot" class="veil">
+  <div class="veil-inner">
+    <div class="brand">THE QUANDARY <span>VS</span></div>
+    <h1 id="bootRoom">TABLE</h1>
+    <p class="boot-note">Tap anywhere to wake the table.</p>
+    <div class="pulse-ring"></div>
+    <div id="bootErr" class="boot-err"></div>
+  </div>
+</section>
+
+<!-- ============ main shell ============ -->
+<main id="shell" hidden>
+
+  <header id="topbar">
+    <div class="tb-left">
+      <span class="dot" id="linkDot"></span>
+      <span id="roomName">ROOM</span>
+    </div>
+    <div class="tb-mid">
+      <div class="clock-label">TIME REMAINING</div>
+      <div id="clock">--:--</div>
+      <div id="clockFlag" class="clock-flag" hidden>CLOCK ACCELERATED</div>
+    </div>
+    <div class="tb-right">
+      <span id="oppName">OPPONENT</span>
+      <span class="dot" id="oppDot"></span>
+    </div>
+  </header>
+
+  <div id="stage">
+
+    <!-- ---- left: opponent camera ---- -->
+    <aside id="feed">
+      <div class="feed-head">
+        <span class="live-dot"></span>
+        <span id="feedTitle">OPPONENT CAM</span>
+      </div>
+      <div class="feed-body">
+        <video id="remoteVideo" autoplay playsinline muted></video>
+        <div id="feedOff" class="feed-off">
+          <div class="static"></div>
+          <span>NO SIGNAL</span>
+        </div>
+      </div>
+      <div class="feed-foot">
+        <span id="oppPhase">—</span>
+        <span id="oppLast"></span>
+      </div>
+      <video id="localVideo" autoplay playsinline muted></video>
+      <div id="onAir" hidden>● ON THEIR WALLS</div>
+    </aside>
+
+    <!-- ---- right: the action panel ---- -->
+    <section id="panel">
+
+      <!-- idle -->
+      <div class="view" data-view="idle">
+        <div class="big-emoji">🎬</div>
+        <h2>STANDING BY</h2>
+        <p class="sub">Your game master hasn't started the VS round yet.</p>
+      </div>
+
+      <!-- ready -->
+      <div class="view" data-view="ready">
+        <h2 class="kicker">SABOTAGE AVAILABLE</h2>
+        <p class="sub">Beat a random challenge to earn one strike against <b id="readyOpp">the other room</b>.</p>
+        <button id="playBtn" class="mega">
+          <span class="mega-top">PLAY FOR A</span>
+          <span class="mega-main">SABOTAGE</span>
+          <span class="mega-sub">random challenge</span>
+        </button>
+        <div class="tally"><span id="tally">0</span> sabotages landed</div>
+      </div>
+
+      <!-- cooldown -->
+      <div class="view" data-view="cooldown">
+        <div class="big-emoji">⏳</div>
+        <h2>RECHARGING</h2>
+        <p class="sub">Your console is cooling down.</p>
+        <div class="countdown" id="cooldownCount">0:00</div>
+        <div class="bar"><i id="cooldownBar"></i></div>
+      </div>
+
+      <!-- lockout -->
+      <div class="view" data-view="lockout">
+        <div class="big-emoji shake">🔒</div>
+        <h2 class="danger">LOCKED OUT</h2>
+        <p class="sub">The other room jammed your console.</p>
+        <div class="countdown danger" id="lockoutCount">0:00</div>
+        <div class="bar danger"><i id="lockoutBar"></i></div>
+      </div>
+
+      <!-- spent -->
+      <div class="view" data-view="spent">
+        <div class="big-emoji">🏁</div>
+        <h2>OUT OF STRIKES</h2>
+        <p class="sub">You've used every sabotage this match.</p>
+      </div>
+
+      <!-- choose a sabotage -->
+      <div class="view" data-view="choose">
+        <h2 class="kicker win">CHOOSE YOUR SABOTAGE</h2>
+        <div class="choose-timer"><i id="chooseBar"></i></div>
+        <div id="sabotageGrid" class="sab-grid"></div>
+      </div>
+
+    </section>
+  </div>
+
+  <!-- soundboard drawer -->
+  <div id="soundboard" hidden>
+    <div class="sb-head">
+      <span>🎛️ SOUNDBOARD LIVE — <b id="sbCount">0:00</b></span>
+      <span class="sb-note">every button fires into their room</span>
+    </div>
+    <div id="sbGrid" class="sb-grid"></div>
+  </div>
+</main>
+
+<!-- ============ full-screen game ============ -->
+<section id="gameLayer" hidden>
+  <div id="gameHud">
+    <div class="gh-left"><span id="gameName">CHALLENGE</span><span id="gameBlurb" class="gh-blurb"></span></div>
+    <div class="gh-mid"><div class="gh-bar"><i id="gameTimeBar"></i></div></div>
+    <div class="gh-right"><span id="gameProgress"></span><button id="quitGame" class="quit">✕</button></div>
+  </div>
+  <div id="gameHost"></div>
+  <div id="gameStart" class="game-overlay">
+    <h2 id="startTitle">CHALLENGE</h2>
+    <p id="startHow"></p>
+    <button id="startBtn" class="mega small"><span class="mega-main">START</span></button>
+  </div>
+  <div id="gameEnd" class="game-overlay" hidden>
+    <h2 id="endTitle"></h2>
+    <p id="endSub"></p>
+  </div>
+</section>
+
+<!-- ============ defuse takeover ============ -->
+<section id="defuseLayer" hidden>
+  <div id="defuseHud">
+    <div class="dh-title">⚠ SPEED TRAP — DEFUSE NOW</div>
+    <div class="dh-count" id="defuseCount">0</div>
+    <div class="dh-bar"><i id="defuseBar"></i></div>
+  </div>
+  <div id="defuseHost"></div>
+</section>
+
+<!-- ============ incoming sabotage banner ============ -->
+<div id="incoming" hidden>
+  <div class="inc-inner">
+    <div class="inc-icon" id="incIcon">⚠</div>
+    <div>
+      <div class="inc-from" id="incFrom"></div>
+      <div class="inc-label" id="incLabel"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ fired confirmation ============ -->
+<div id="fired" hidden>
+  <div class="fired-inner">
+    <div class="fired-icon" id="firedIcon">💥</div>
+    <div class="fired-label" id="firedLabel"></div>
+    <div class="fired-target" id="firedTarget"></div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="games/engine.js"></script>
+<script src="games/flappy.js"></script>
+<script src="games/simon.js"></script>
+<script src="games/runner.js"></script>
+<script src="games/flow.js"></script>
+<script src="games/reaction.js"></script>
+<script src="games/memory.js"></script>
+<script src="lib/video.js"></script>
+<script src="table.js"></script>
+</body>
+</html>

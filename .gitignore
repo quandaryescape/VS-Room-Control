@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Local configuration — this is the file with your room IDs, light addresses,
+# Wall Player URLs and shared tokens in it. Copy config.example.json to
+# config.json on each install and keep it out of the repo.
+config.json
+wallplayer/config.json
+
+# Runtime output
+*.log
+stalls.log
+npm-debug.log*
+
+# OS noise
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp

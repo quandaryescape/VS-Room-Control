@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VS Control — Operator</title>
+<style>
+  :root {
+    --ink: #0a0d14; --panel: #151b27; --panel-2: #111621; --line: #253046;
+    --text: #eef2f8; --dim: #808da6; --lamp: #f2a93b; --good: #35d07f; --stop: #ff4d4d;
+    --mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
+    --sans: "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--ink); color: var(--text); font-family: var(--sans); font-size: 15px;
+    padding: 20px 24px 60px; max-width: 1500px; margin: 0 auto;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 14px; margin-bottom: 20px;
+  }
+  h1 { font: 600 15px/1 var(--mono); letter-spacing: .22em; text-transform: uppercase; margin: 0; }
+  h1 span { color: var(--lamp); }
+  #link { font: 12px var(--mono); color: var(--dim); letter-spacing: .06em; }
+  #link b { color: var(--text); }
+  #link .live { color: var(--good); }
+
+  button {
+    font: 600 13px var(--sans); background: var(--panel); color: var(--text);
+    border: 1px solid var(--line); border-radius: 6px; padding: 9px 16px; cursor: pointer;
+  }
+  button:hover { border-color: var(--dim); }
+  button:disabled { opacity: .4; cursor: default; }
+  button.primary { background: var(--good); border-color: var(--good); color: #06210f; }
+  button.warn { background: var(--lamp); border-color: var(--lamp); color: #241a06; }
+  button.danger { background: var(--stop); border-color: var(--stop); color: #2a0505; }
+  button.ghost { background: transparent; }
+  button.sm { padding: 5px 10px; font-size: 12px; }
+
+  .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 22px; }
+  .matchpill {
+    font: 12px var(--mono); letter-spacing: .18em; padding: 8px 14px;
+    border: 1px solid var(--line); border-radius: 20px; color: var(--dim);
+  }
+  .matchpill.on { color: var(--good); border-color: var(--good); }
+
+  .rooms { display: grid; grid-template-columns: repeat(auto-fit, minmax(430px, 1fr)); gap: 16px; margin-bottom: 26px; }
+  .room { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); overflow: hidden; }
+  .room.locked { border-color: var(--stop); }
+  .room h2 {
+    margin: 0; padding: 12px 16px; border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    font: 700 16px var(--sans); background: var(--panel-2);
+  }
+  .phase {
+    font: 11px var(--mono); letter-spacing: .16em; padding: 4px 9px; border-radius: 4px;
+    border: 1px solid var(--line); color: var(--dim);
+  }
+  .phase.ready { color: var(--good); border-color: var(--good); }
+  .phase.lockout, .phase.defusing { color: var(--stop); border-color: var(--stop); }
+  .phase.choose { color: var(--lamp); border-color: var(--lamp); }
+
+  .room .body { padding: 14px 16px; display: grid; gap: 12px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stat { background: var(--panel-2); border: 1px solid var(--line); border-radius: 7px; padding: 9px 11px; }
+  .stat .k { font: 10px var(--mono); letter-spacing: .18em; color: var(--dim); display: block; margin-bottom: 3px; }
+  .stat .v { font: 600 15px var(--mono); }
+  .stat .v.bad { color: var(--stop); }
+  .stat .v.good { color: var(--good); }
+  .caps { display: flex; gap: 6px; flex-wrap: wrap; }
+  .cap {
+    font: 10px var(--mono); letter-spacing: .12em; padding: 3px 8px; border-radius: 4px;
+    border: 1px solid var(--line); color: #55607a;
+  }
+  .cap.on { color: var(--good); border-color: #1f4a33; background: #0e1f17; }
+  .effects { display: flex; gap: 6px; flex-wrap: wrap; min-height: 26px; }
+  .fx {
+    font: 11px var(--mono); padding: 4px 9px; border-radius: 4px;
+    border: 1px solid var(--stop); background: #1e0d10; color: var(--stop);
+  }
+  .rowbtns { display: flex; gap: 6px; flex-wrap: wrap; }
+  .fire { display: flex; gap: 6px; flex-wrap: wrap; }
+  .fire button { background: var(--panel-2); font: 600 12px var(--sans); padding: 7px 11px; }
+  .fire button:hover { border-color: var(--lamp); color: var(--lamp); }
+  .muted { color: var(--dim); font: 12px var(--mono); }
+
+  h3 { font: 600 12px var(--mono); letter-spacing: .2em; text-transform: uppercase; color: var(--dim); margin: 0 0 10px; }
+  .log {
+    border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2);
+    max-height: 320px; overflow-y: auto; font: 12.5px/1.6 var(--mono);
+  }
+  .log div { padding: 5px 14px; border-bottom: 1px solid #1b2333; display: flex; gap: 12px; }
+  .log div:last-child { border-bottom: none; }
+  .log .t { color: #4d5872; flex: 0 0 62px; }
+  .log .s { color: var(--lamp); flex: 0 0 110px; }
+  .log .warn .m { color: var(--lamp); }
+  .log .error .m { color: var(--stop); }
+  #probe { white-space: pre-wrap; font: 12px var(--mono); color: var(--dim); margin-top: 10px; }
+  #toast {
+    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px 18px; font: 13px var(--mono); opacity: 0; transition: opacity .25s;
+    pointer-events: none;
+  }
+  #toast.show { opacity: 1; }
+  #toast.err { border-color: var(--stop); color: var(--stop); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>VS <span>Control</span> · Operator</h1>
+  <div id="link">connecting…</div>
+</header>
+
+<div class="toolbar">
+  <span id="matchPill" class="matchpill">MATCH IDLE</span>
+  <button id="armBtn" class="primary">Arm match</button>
+  <button id="endBtn" class="ghost">End match</button>
+  <button id="stopBtn" class="danger">ALL STOP</button>
+  <button id="probeBtn" class="ghost">Probe hardware</button>
+</div>
+
+<div class="rooms" id="rooms"></div>
+
+<h3>Event log</h3>
+<div class="log" id="log"></div>
+<div id="probe"></div>
+
+<div id="toast"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="operator.js"></script>
+</body>
+</html>

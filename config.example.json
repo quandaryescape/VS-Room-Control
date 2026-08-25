@@ -1,0 +1,143 @@
+{
+  "//": "Copy this file to config.json and edit. Everything the VS layer touches is described here.",
+
+  "port": 8990,
+  "operatorPin": "",
+
+  "quandary": {
+    "enabled": true,
+    "url": "http://127.0.0.1:3000",
+    "//comment": "Quandary Control is never modified. We connect as a GM socket client and use its public REST API."
+  },
+
+  "rules": {
+    "cooldownSeconds": 120,
+    "lockoutSeconds": 300,
+    "minigameTimeLimitSeconds": 90,
+    "sabotageChoiceSeconds": 45,
+    "armedOnly": true,
+    "//armedOnly": "true = teams can only earn/fire sabotages while the operator (or Quandary) has armed the match.",
+    "maxSabotagesPerTeam": 0,
+    "//maxSabotagesPerTeam": "0 = unlimited",
+    "minigames": ["flappy", "simon", "runner", "flow", "reaction", "memory"],
+    "//minigames": "Pool the server draws from at random. Remove ids to disable a game.",
+    "avoidRepeatCount": 2,
+    "//avoidRepeatCount": "Don't hand a team the same game again until N other games have been played."
+  },
+
+  "rooms": {
+    "A": {
+      "name": "Room A",
+      "opponent": "B",
+      "quandaryRoomId": "",
+      "//quandaryRoomId": "The room UUID from Quandary Control (see Admin > room, or GET /api/v1/rooms).",
+
+      "wallPlayer": {
+        "enabled": true,
+        "url": "http://192.168.1.21:8991",
+        "token": "",
+        "//token": "Must match vsToken in the Wall Player's config.json.",
+        "sabotageVideos": [],
+        "//sabotageVideos": "Optional filenames from the Wall Player video folder used by the 'takeover' sabotage."
+      },
+
+      "lights": {
+        "driver": "null",
+        "//driver": "null | kasa | shelly | hue | hass | webhook",
+        "devices": [],
+        "//devices": "kasa/shelly: IP addresses. hue: light ids. hass: entity_ids. webhook: ignored.",
+        "options": {}
+      },
+
+      "camera": {
+        "enabled": true,
+        "label": "",
+        "//label": "Optional substring of the USB camera's device label, if the PC has more than one camera."
+      }
+    },
+
+    "B": {
+      "name": "Room B",
+      "opponent": "A",
+      "quandaryRoomId": "",
+
+      "wallPlayer": {
+        "enabled": true,
+        "url": "http://192.168.1.22:8991",
+        "token": "",
+        "sabotageVideos": []
+      },
+
+      "lights": {
+        "driver": "null",
+        "devices": [],
+        "options": {}
+      },
+
+      "camera": {
+        "enabled": true,
+        "label": ""
+      }
+    }
+  },
+
+  "lightDriverExamples": {
+    "kasa": {
+      "driver": "kasa",
+      "devices": ["192.168.1.31", "192.168.1.32"],
+      "options": { "//": "TP-Link Kasa plugs/bulbs, local LAN protocol on port 9999. No cloud, no dependencies." }
+    },
+    "shelly": {
+      "driver": "shelly",
+      "devices": ["192.168.1.41", "192.168.1.42"],
+      "options": { "gen": 2, "channel": 0, "//gen": "1 for Shelly 1/1PM/Dimmer, 2 for Plus/Pro." }
+    },
+    "hue": {
+      "driver": "hue",
+      "devices": ["3", "4", "5"],
+      "options": { "bridge": "192.168.1.50", "username": "your-hue-api-username" }
+    },
+    "hass": {
+      "driver": "hass",
+      "devices": ["light.room_a_main", "switch.room_a_lamp"],
+      "options": { "url": "http://192.168.1.60:8123", "token": "long-lived-access-token" }
+    },
+    "webhook": {
+      "driver": "webhook",
+      "options": {
+        "on": "http://192.168.1.70/relay/1?turn=on",
+        "off": "http://192.168.1.70/relay/1?turn=off",
+        "method": "GET"
+      }
+    }
+  },
+
+  "sabotages": {
+    "blackout": { "enabled": true, "seconds": 20, "label": "Kill The Lights" },
+    "strobe": { "enabled": true, "seconds": 15, "intervalMs": 700, "label": "Strobe" },
+    "annoy": { "enabled": true, "label": "Annoying Noise" },
+    "soundboard": { "enabled": true, "seconds": 60, "label": "Soundboard" },
+    "speedtrap": {
+      "enabled": true,
+      "defuseSeconds": 30,
+      "penaltySeconds": 180,
+      "multiplier": 2,
+      "label": "Speed Trap"
+    },
+    "lockout": { "enabled": true, "seconds": 300, "label": "Lockout" },
+    "takeover": { "enabled": true, "seconds": 20, "label": "Wall Takeover" },
+    "dimwalls": { "enabled": true, "seconds": 30, "label": "Dim The Walls" },
+    "steal": { "enabled": true, "amountSeconds": 60, "label": "Steal A Minute" }
+  },
+
+  "sounds": [
+    { "id": "airhorn",   "label": "Air Horn",    "file": "airhorn.wav" },
+    { "id": "alarm",     "label": "Alarm",       "file": "alarm.wav" },
+    { "id": "babycry",   "label": "Baby Crying", "file": "babycry.wav" },
+    { "id": "kazoo",     "label": "Sad Kazoo",   "file": "kazoo.wav" },
+    { "id": "scream",    "label": "Scream",      "file": "scream.wav" },
+    { "id": "vuvuzela",  "label": "Vuvuzela",    "file": "vuvuzela.wav" },
+    { "id": "dialup",    "label": "Dial-Up",     "file": "dialup.wav" },
+    { "id": "laughter",  "label": "Laugh Track", "file": "laughter.wav" }
+  ]
+}

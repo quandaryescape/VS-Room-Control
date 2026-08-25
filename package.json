@@ -1,0 +1,20 @@
+{
+  "name": "vs-room-control",
+  "version": "1.0.0",
+  "description": "Head-to-head (VS) escape room layer: touchscreen table mini-games, sabotage routing, lights/projector/audio/timer effects. Talks to Quandary Control and Wall Player without modifying Quandary Control.",
+  "main": "server/vs-server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server/vs-server.js",
+    "dev": "node --watch server/vs-server.js",
+    "lights:scan": "node server/tools/scan-lights.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1"
+  },
+  "license": "ISC"
+}
