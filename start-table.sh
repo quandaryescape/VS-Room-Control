@@ -29,7 +29,24 @@ if [ "$(id -u)" -eq 0 ]; then
   exit 1
 fi
 
-# ---- edit these two lines per table -------------------------------------
+# ---- per-table settings --------------------------------------------------
+# Normally these arrive from the autostart entry, which passes them as
+# "env ROOM=A SERVER=http://... start-table.sh". When you run this by hand
+# they are unset, so fall back to whatever install-linux.sh wrote into that
+# entry - otherwise a manual test silently targets a different server than
+# the one the table actually uses at boot.
+AUTOSTART_ENTRY="$HOME/.config/autostart/vs-table.desktop"
+if [ -z "${ROOM:-}" ] || [ -z "${SERVER:-}" ]; then
+  if [ -r "$AUTOSTART_ENTRY" ]; then
+    entry_exec="$(grep -m1 '^Exec=' "$AUTOSTART_ENTRY" 2>/dev/null || true)"
+    entry_room="$(printf '%s\n' "$entry_exec" | sed -n 's/.*ROOM=\([^ ]*\).*/\1/p')"
+    entry_server="$(printf '%s\n' "$entry_exec" | sed -n 's/.*SERVER=\([^ ]*\).*/\1/p')"
+    [ -z "${ROOM:-}" ]   && [ -n "$entry_room" ]   && ROOM="$entry_room"
+    [ -z "${SERVER:-}" ] && [ -n "$entry_server" ] && SERVER="$entry_server"
+    [ -n "${SERVER:-}" ] && echo "Using ROOM/SERVER from $AUTOSTART_ENTRY"
+  fi
+fi
+
 ROOM="${ROOM:-A}"
 SERVER="${SERVER:-http://192.168.1.20:8990}"
 # -------------------------------------------------------------------------
@@ -131,12 +148,27 @@ fi
 # --- wait for the VS server ----------------------------------------------
 # At boot the table PC is usually up before the server box is. Rather than
 # opening on a connection-refused page, sit here for up to two minutes.
+SERVER_UP=0
 if command -v curl >/dev/null 2>&1; then
   echo "Waiting for $SERVER ..."
   for _ in $(seq 1 60); do
-    if curl -fsS --max-time 2 -o /dev/null "$SERVER/table/"; then break; fi
+    if curl -fsS --max-time 2 -o /dev/null "$SERVER/table/"; then SERVER_UP=1; break; fi
     sleep 2
   done
+  if [ "$SERVER_UP" -eq 0 ]; then
+    echo
+    echo "  ****************************************************************"
+    echo "  * No answer from $SERVER after 2 minutes."
+    echo "  * The kiosk is about to open on a page that will not load, which"
+    echo "  * looks like a black screen on the table. Check:"
+    echo "  *   - is the VS server running?   systemctl status vs-server"
+    echo "  *   - reachable from here?        curl $SERVER/api/health"
+    echo "  *   - is that the right address?  ./install-linux.sh check-table"
+    echo "  ****************************************************************"
+    echo
+  fi
+else
+  echo "curl not installed - skipping the wait for $SERVER"
 fi
 
 # Chrome remembers that it was killed and offers to restore tabs, which on a

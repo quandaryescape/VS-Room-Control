@@ -169,7 +169,10 @@ Run the built-in diagnostic on the table PC to check that and everything else
 ```
 
 To rule the autostart wiring in or out, run the launcher by hand — if this
-works but boot doesn't, it's the login/session problem above, not the script:
+works but boot doesn't, it's the login/session problem above, not the script.
+With no `ROOM`/`SERVER` in the environment it reads them from the installed
+autostart entry, so a manual run targets the same server the table uses at
+boot:
 
 ```bash
 ./start-table.sh
