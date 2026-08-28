@@ -53,21 +53,28 @@ On the machine that will run the VS server (either table PC, the Quandary PC,
 or a small box — it just needs to reach the lights, both Wall Player PCs, and
 Quandary Control):
 
-```bash
-npm install
-```
-
-Copy the config and edit it:
-
-```bash
-copy config.example.json config.json
-```
-
-Then start it:
+**Windows**
 
 ```bash
 Start-VSServer.bat
 ```
+
+**Ubuntu / Linux** (needs Node 18+)
+
+If the scripts came off a Windows share or a fresh clone they may not be
+executable yet:
+
+```bash
+chmod +x start-vsserver.sh start-table.sh install-linux.sh
+```
+
+```bash
+./start-vsserver.sh
+```
+
+Either launcher creates `config.json` from `config.example.json` on first run
+and installs dependencies if `node_modules` is missing. Open `config.json` and
+set your room IDs, light addresses and Wall Player URLs before a real game.
 
 It prints the URLs you need:
 
@@ -77,8 +84,79 @@ It prints the URLs you need:
   Table B            : http://192.168.1.20:8990/table/?room=B
 ```
 
-On each table PC, copy `Start-Table.bat`, set `ROOM` and `SERVER` at the top,
-and drop a shortcut into `shell:startup`.
+On each table PC:
+
+- **Windows** — copy `Start-Table.bat`, set `ROOM` and `SERVER` at the top, and
+  drop a shortcut into `shell:startup`.
+- **Ubuntu** — see below.
+
+---
+
+## Starting automatically on Ubuntu
+
+### Don't run it from a network share
+
+Copy the project to the Ubuntu box's **local disk** first. Browsing to the
+Windows share in Files and running it from there does not work: GNOME mounts
+those under `/run/user/1000/gvfs/...`, which is `noexec`, and which root cannot
+read at all — so `sudo ./install-linux.sh server` fails with a misleading
+`command not found`. A network path is also the wrong home for a boot service,
+because the mount only exists once someone has logged into the desktop.
+
+```bash
+cp -r "/run/user/1000/gvfs/ftp:host=glados.local/disk1/quandary/Programming/Vs Room/VS-Room-Control" ~/vs-room-control
+```
+
+```bash
+cd ~/vs-room-control && chmod +x install-linux.sh start-vsserver.sh start-table.sh
+```
+
+The `chmod` is needed because the executable bit doesn't survive a copy over
+FTP or SMB. `install-linux.sh` checks all of this and tells you what to fix.
+
+`install-linux.sh` wires both halves into the OS so nothing needs a human at
+boot.
+
+**The server box** — a systemd service, so it starts before anyone logs in and
+restarts itself if it dies:
+
+```bash
+sudo ./install-linux.sh server
+```
+
+It runs as the user who owns the checkout (not root), and gets 20 seconds on
+shutdown to restore both rooms' lights and walls. Afterwards:
+
+```bash
+journalctl -u vs-server -f
+```
+
+**Each table PC** — a desktop autostart entry, so the kiosk browser comes up
+with the graphical session. Run it as that table's own user, *without* `sudo`:
+
+```bash
+./install-linux.sh table --room A --server http://192.168.1.20:8990
+```
+
+`--room` and `--server` are baked into the autostart entry, so you don't need
+to edit `start-table.sh` per machine. Test it without rebooting by running
+`./start-table.sh` directly. For an unattended table also turn on **Settings →
+Users → Automatic Login**.
+
+The table launcher waits up to two minutes for the server to answer before
+opening — the table PC is usually up before the server box is — disables screen
+blanking, and clears Chrome's "didn't shut down properly" prompt, which on a
+kiosk is a dialog nobody can dismiss.
+
+To undo either:
+
+```bash
+sudo ./install-linux.sh uninstall-server
+```
+
+```bash
+./install-linux.sh uninstall-table
+```
 
 ---
 

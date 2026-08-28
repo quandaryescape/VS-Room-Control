@@ -1,0 +1,13 @@
+# This repo is edited on Windows and run on Ubuntu. Shell scripts must keep
+# LF endings wherever they are checked out - a CRLF shebang gives you
+# "bad interpreter: /usr/bin/env bash^M" on the table and server boxes.
+*.sh text eol=lf
+
+# Batch files are the other way round.
+*.bat text eol=crlf
+
+*.js   text eol=lf
+*.json text eol=lf
+*.html text eol=lf
+*.css  text eol=lf
+*.md   text eol=lf
