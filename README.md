@@ -175,6 +175,40 @@ works but boot doesn't, it's the login/session problem above, not the script:
 ./start-table.sh
 ```
 
+### Snap Chromium and the blank kiosk window
+
+`sudo apt install chromium-browser` on Ubuntu installs the **snap**, which runs
+under AppArmor confinement. It cannot write to `~/.config`, so the kiosk
+profile fails to create and you get a blank window plus:
+
+```
+Failed To Create Data Directory - Chromium cannot read and write to its data directory
+```
+
+`start-table.sh` detects a snap browser (including the `/usr/bin/chromium`
+wrapper script that quietly execs it) and moves the profile to
+`~/snap/chromium/common/vstable/<room>`, which the snap can write.
+
+The camera is a second hurdle — the snap needs the interface connected before
+the table can send video to the other room:
+
+```bash
+sudo snap connect chromium:camera
+```
+
+For a table PC, the `.deb` build of Chrome sidesteps both:
+
+```bash
+wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+```
+
+```bash
+sudo apt install -y ./google-chrome-stable_current_amd64.deb
+```
+
+`start-table.sh` prefers `google-chrome-stable` over Chromium, so nothing else
+needs changing once it's installed.
+
 To undo either:
 
 ```bash

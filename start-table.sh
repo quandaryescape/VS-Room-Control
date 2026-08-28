@@ -25,7 +25,6 @@ SERVER="${SERVER:-http://192.168.1.20:8990}"
 # -------------------------------------------------------------------------
 
 URL="$SERVER/table/?room=$ROOM"
-PROFILE="$HOME/.config/vstable/$ROOM"
 
 # --- find a browser ------------------------------------------------------
 BROWSER=""
@@ -38,8 +37,50 @@ done
 
 if [ -z "$BROWSER" ]; then
   echo "Could not find Chrome, Chromium or Edge."
-  echo "Install one, e.g.:  sudo apt install -y chromium-browser"
-  echo "or edit BROWSER in this file."
+  echo "Install one - the .deb build of Chrome is the safe choice for a kiosk:"
+  echo "    wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb"
+  echo "    sudo apt install -y ./google-chrome-stable_current_amd64.deb"
+  exit 1
+fi
+
+# --- where the throwaway profile lives ------------------------------------
+# The snap build of Chromium runs confined: AppArmor grants it non-hidden
+# paths under $HOME plus its own ~/snap/chromium tree, and nothing else.
+# Pointing --user-data-dir at ~/.config/vstable there gets you
+#   "Failed To Create Data Directory - Chromium cannot read and write to its
+#    data directory"
+# and a blank window. Put the profile somewhere the snap can actually write.
+browser_is_snap() {
+  local resolved
+  resolved="$(readlink -f "$1" 2>/dev/null || echo "$1")"
+  case "$resolved" in /snap/*|*/snap/bin/*) return 0 ;; esac
+  # Ubuntu ships /usr/bin/chromium and /usr/bin/chromium-browser as small
+  # shell wrappers that exec the snap, so the path alone does not give it
+  # away - look inside if it is a script rather than a binary.
+  if head -c 2 "$resolved" 2>/dev/null | grep -q '#!' &&
+     grep -qi 'snap' "$resolved" 2>/dev/null; then
+    return 0
+  fi
+  return 1
+}
+
+if browser_is_snap "$BROWSER"; then
+  PROFILE="$HOME/snap/chromium/common/vstable/$ROOM"
+  echo "Note: $BROWSER is the snap build of Chromium."
+  echo "  Using profile $PROFILE (the snap cannot write to ~/.config)."
+  echo "  The table needs its USB camera. If the feed stays black, run:"
+  echo "      sudo snap connect chromium:camera"
+  echo "  Installing .deb Chrome avoids both issues - see the README."
+else
+  PROFILE="$HOME/.config/vstable/$ROOM"
+fi
+
+mkdir -p "$PROFILE" 2>/dev/null || true
+if [ ! -w "$PROFILE" ]; then
+  echo "Cannot write to the browser profile directory: $PROFILE"
+  echo "Chromium will fail to start with a blank window. Install .deb Chrome:"
+  echo "    wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb"
+  echo "    sudo apt install -y ./google-chrome-stable_current_amd64.deb"
   exit 1
 fi
 
