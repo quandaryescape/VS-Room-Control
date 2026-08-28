@@ -11,6 +11,11 @@
 #         this machine's desktop session logs in. Run as the table's own
 #         user, NOT with sudo - it needs that user's graphical session.
 #
+#    ./install-linux.sh check-table
+#         Diagnoses a table that did not come up by itself: autostart entry,
+#         exec bits, automatic login, browser, and whether the VS server is
+#         answering. Run it as the table user on the table PC.
+#
 #    sudo ./install-linux.sh uninstall-server
 #         ./install-linux.sh uninstall-table
 #
@@ -167,7 +172,7 @@ install_table() {
 Type=Application
 Name=VS Table $room
 Comment=VS Room Control touchscreen table (kiosk)
-Exec=env ROOM=$room SERVER=$server $HERE/start-table.sh
+Exec=env ROOM=$room SERVER=$server "$HERE/start-table.sh"
 Terminal=false
 X-GNOME-Autostart-enabled=true
 X-GNOME-Autostart-Delay=5
@@ -179,13 +184,27 @@ DESKTOP
   echo "    room   : $room"
   echo "    server : $server"
   echo
-  echo "  The kiosk will start at the next login of this user."
   echo "  Test it now without rebooting:  $HERE/start-table.sh"
-  echo "  (ROOM and SERVER above are passed in, so the defaults inside"
-  echo "   start-table.sh do not need editing.)"
   echo
-  echo "  For an unattended table, also turn on automatic login:"
-  echo "    Settings > Users > Automatic Login"
+
+  # An autostart entry runs at graphical LOGIN, not at boot. Without automatic
+  # login the table sits on the GDM password prompt forever and nothing starts,
+  # which looks exactly like "the autostart is broken". Say so loudly here
+  # rather than as a footnote.
+  if [ -r /etc/gdm3/custom.conf ] &&
+     grep -Eq '^[[:space:]]*AutomaticLoginEnable[[:space:]]*=[[:space:]]*[Tt]rue' /etc/gdm3/custom.conf; then
+    echo "  Automatic login is on, so this comes up on every boot."
+  else
+    echo "  !! Automatic login is NOT enabled on this machine."
+    echo "     Autostart entries run when a desktop session STARTS, so with the"
+    echo "     login screen in the way nothing will launch at boot. Turn it on:"
+    echo "         Settings > Users > Unlock > Automatic Login"
+    echo "     or in /etc/gdm3/custom.conf under [daemon]:"
+    echo "         AutomaticLoginEnable=true"
+    echo "         AutomaticLogin=${USER:-$(id -un)}"
+  fi
+  echo
+  echo "  Recheck any time with:  $0 check-table"
 }
 
 uninstall_table() {
@@ -193,10 +212,111 @@ uninstall_table() {
   echo "  Removed $AUTOSTART_PATH"
 }
 
+# ------------------------------------------------------------ check-table ---
+# Everything that has to be true for the kiosk to come up by itself, checked
+# one at a time. Run this on the table PC when it did not start.
+check_table() {
+  local ok=0 warn=0
+  say()  { printf '  %s %s\n' "$1" "$2"; }
+  good() { say ' ok ' "$1"; }
+  bad()  { say ' !! ' "$1"; ok=1; }
+  note() { say ' -- ' "$1"; warn=1; }
+
+  echo
+  echo "  VS table autostart check"
+  echo "  ------------------------"
+
+  # 1. the autostart entry
+  if [ -f "$AUTOSTART_PATH" ]; then
+    good "autostart entry present: $AUTOSTART_PATH"
+    local exec_line
+    exec_line="$(grep -m1 '^Exec=' "$AUTOSTART_PATH" || true)"
+    say '    ' "$exec_line"
+    if grep -q '^Hidden=true' "$AUTOSTART_PATH"; then
+      bad "entry has Hidden=true - something disabled it. Re-run: $0 table --room A --server URL"
+    fi
+    if command -v desktop-file-validate >/dev/null 2>&1; then
+      if desktop-file-validate "$AUTOSTART_PATH" >/dev/null 2>&1; then
+        good "entry parses cleanly"
+      else
+        bad "entry is malformed:"
+        desktop-file-validate "$AUTOSTART_PATH" 2>&1 | sed 's/^/        /'
+      fi
+    fi
+  else
+    bad "no autostart entry at $AUTOSTART_PATH - run: $0 table --room A --server URL"
+  fi
+
+  # 2. the launcher itself
+  if [ -x "$HERE/start-table.sh" ]; then
+    good "start-table.sh is executable"
+  else
+    bad "start-table.sh is NOT executable - chmod +x \"$HERE\"/*.sh"
+  fi
+
+  # 3. a graphical session at all
+  if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+    good "graphical session (${XDG_SESSION_TYPE:-unknown})"
+  else
+    note "no graphical session detected - autostart entries only run inside one."
+  fi
+
+  # 4. automatic login - the usual reason "it didn't run at boot". Without it
+  #    the machine sits on the login screen and no session, hence no autostart.
+  local autologin="unknown"
+  if [ -r /etc/gdm3/custom.conf ]; then
+    if grep -Eq '^[[:space:]]*AutomaticLoginEnable[[:space:]]*=[[:space:]]*[Tt]rue' /etc/gdm3/custom.conf; then
+      autologin="on"
+    else
+      autologin="off"
+    fi
+  fi
+  case "$autologin" in
+    on)  good "automatic login is enabled" ;;
+    off) bad "automatic login is OFF - the PC stops at the login screen at boot,
+        so nothing autostarts. Settings > Users > Unlock > Automatic Login,
+        or set in /etc/gdm3/custom.conf under [daemon]:
+            AutomaticLoginEnable=true
+            AutomaticLogin=${USER:-$(id -un)}" ;;
+    *)   note "could not read /etc/gdm3/custom.conf - check automatic login by hand" ;;
+  esac
+
+  # 5. a browser to launch
+  local browser=""
+  for c in google-chrome-stable google-chrome chromium chromium-browser microsoft-edge-stable microsoft-edge; do
+    command -v "$c" >/dev/null 2>&1 && { browser="$c"; break; }
+  done
+  if [ -n "$browser" ]; then good "browser found: $browser"; else bad "no Chrome/Chromium/Edge on PATH"; fi
+
+  # 6. can we actually reach the server the entry points at
+  local server
+  server="$(sed -n 's/.*SERVER=\([^ ]*\).*/\1/p' "$AUTOSTART_PATH" 2>/dev/null || true)"
+  if [ -n "$server" ] && command -v curl >/dev/null 2>&1; then
+    if curl -fsS --max-time 4 -o /dev/null "$server/api/health"; then
+      good "VS server answering at $server"
+    else
+      note "no answer from $server/api/health (start-table.sh waits 2 min for this)"
+    fi
+  fi
+
+  echo
+  if [ "$ok" -ne 0 ]; then
+    echo "  Fix the !! lines above, then reboot to retest."
+  elif [ "$warn" -ne 0 ]; then
+    echo "  Nothing fatal. Check the -- lines."
+  else
+    echo "  All good - it should come up on the next boot."
+  fi
+  echo "  Test the launcher right now without rebooting:"
+  echo "      $HERE/start-table.sh"
+  echo
+}
+
 # ------------------------------------------------------------------ main ---
 case "${1:-}" in
   server)            shift; install_server "$@" ;;
   table)             shift; install_table "$@" ;;
+  check-table)       shift; check_table ;;
   uninstall-server)  shift; uninstall_server ;;
   uninstall-table)   shift; uninstall_table ;;
   *) usage ;;

@@ -148,6 +148,33 @@ opening — the table PC is usually up before the server box is — disables scr
 blanking, and clears Chrome's "didn't shut down properly" prompt, which on a
 kiosk is a dialog nobody can dismiss.
 
+### When a table doesn't come up on its own
+
+Autostart entries run when a **desktop session starts**, not when the machine
+boots. If the table stops at the login screen, no session ever starts and
+nothing launches — which looks identical to a broken autostart. Turn on
+**Settings → Users → Unlock → Automatic Login**, or in `/etc/gdm3/custom.conf`
+under `[daemon]`:
+
+```
+AutomaticLoginEnable=true
+AutomaticLogin=your-table-user
+```
+
+Run the built-in diagnostic on the table PC to check that and everything else
+(entry present and valid, exec bits, a browser on PATH, server reachable):
+
+```bash
+./install-linux.sh check-table
+```
+
+To rule the autostart wiring in or out, run the launcher by hand — if this
+works but boot doesn't, it's the login/session problem above, not the script:
+
+```bash
+./start-table.sh
+```
+
 To undo either:
 
 ```bash
