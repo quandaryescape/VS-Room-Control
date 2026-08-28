@@ -290,12 +290,42 @@ check_table() {
     *)   note "could not read /etc/gdm3/custom.conf - check automatic login by hand" ;;
   esac
 
-  # 5. a browser to launch
-  local browser=""
+  # 5. a browser to launch, and the profile path it implies
+  local browser="" bpath="" resolved="" profile=""
   for c in google-chrome-stable google-chrome chromium chromium-browser microsoft-edge-stable microsoft-edge; do
-    command -v "$c" >/dev/null 2>&1 && { browser="$c"; break; }
+    command -v "$c" >/dev/null 2>&1 && { browser="$c"; bpath="$(command -v "$c")"; break; }
   done
-  if [ -n "$browser" ]; then good "browser found: $browser"; else bad "no Chrome/Chromium/Edge on PATH"; fi
+  if [ -n "$browser" ]; then
+    good "browser found: $bpath"
+    resolved="$(readlink -f "$bpath" 2>/dev/null || echo "$bpath")"
+    local is_snap=1
+    case "$bpath"    in /snap/*|*/snap/bin/*) is_snap=0 ;; esac
+    case "$resolved" in /snap/*|*/snap/bin/*|/usr/bin/snap|*/bin/snap) is_snap=0 ;; esac
+    if [ "$is_snap" -ne 0 ] && head -c 2 "$resolved" 2>/dev/null | grep -q '#!' &&
+       grep -qi 'snap' "$resolved" 2>/dev/null; then is_snap=0; fi
+
+    if [ "$is_snap" -eq 0 ]; then
+      profile="$HOME/snap/chromium/common/vstable/A"
+      note "this is the SNAP build (resolves to $resolved)"
+      say '    ' "profile -> $profile"
+      say '    ' "the snap cannot write ~/.config, and needs the camera interface:"
+      say '    ' "    sudo snap connect chromium:camera"
+      say '    ' "a .deb Chrome avoids both - see the README"
+    else
+      profile="$HOME/.config/vstable/A"
+      say '    ' "profile -> $profile"
+    fi
+
+    # A profile directory left behind by an earlier root/sudo run is a classic
+    # "starts then dies" cause - Chromium cannot create its SingletonLock.
+    if [ -e "$profile" ] && [ ! -w "$profile" ]; then
+      bad "profile directory exists but is not writable: $profile
+        Probably left by an earlier sudo run. Remove it:
+            sudo rm -rf \"$profile\""
+    fi
+  else
+    bad "no Chrome/Chromium/Edge on PATH"
+  fi
 
   # 6. can we actually reach the server the entry points at
   local server

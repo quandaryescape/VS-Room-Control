@@ -70,12 +70,23 @@ fi
 #    data directory"
 # and a blank window. Put the profile somewhere the snap can actually write.
 browser_is_snap() {
-  local resolved
-  resolved="$(readlink -f "$1" 2>/dev/null || echo "$1")"
-  case "$resolved" in /snap/*|*/snap/bin/*) return 0 ;; esac
-  # Ubuntu ships /usr/bin/chromium and /usr/bin/chromium-browser as small
-  # shell wrappers that exec the snap, so the path alone does not give it
-  # away - look inside if it is a script rather than a binary.
+  local orig resolved
+  orig="$1"
+
+  # Check the path we were given BEFORE resolving it. /snap/bin/chromium is a
+  # symlink to /usr/bin/snap, so readlink -f throws away the one piece of
+  # evidence that matters.
+  case "$orig" in /snap/*|*/snap/bin/*) return 0 ;; esac
+
+  resolved="$(readlink -f "$orig" 2>/dev/null || echo "$orig")"
+  case "$resolved" in
+    /snap/*|*/snap/bin/*) return 0 ;;
+    /usr/bin/snap|*/bin/snap) return 0 ;;   # resolved to the snap launcher
+  esac
+
+  # Ubuntu also ships /usr/bin/chromium and /usr/bin/chromium-browser as small
+  # shell wrappers that exec the snap, so the path alone does not give it away
+  # - look inside if it is a script rather than a binary.
   if head -c 2 "$resolved" 2>/dev/null | grep -q '#!' &&
      grep -qi 'snap' "$resolved" 2>/dev/null; then
     return 0
