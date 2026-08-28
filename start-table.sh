@@ -19,10 +19,29 @@
 # ===========================================================================
 set -uo pipefail
 
+# The kiosk must run as the table's own desktop user. Under sudo the session
+# bus and XDG_RUNTIME_DIR belong to uid 0, so Chrome cannot reach the desktop
+# ("cannot create directory /run/user/0") and refuses to run as root anyway.
+if [ "$(id -u)" -eq 0 ]; then
+  echo "Do not run this with sudo - the kiosk needs the desktop user's session."
+  echo "Run it plainly:"
+  echo "    ROOM=A SERVER=http://192.168.1.20:8990 ./start-table.sh"
+  exit 1
+fi
+
 # ---- edit these two lines per table -------------------------------------
 ROOM="${ROOM:-A}"
 SERVER="${SERVER:-http://192.168.1.20:8990}"
 # -------------------------------------------------------------------------
+
+# A bare host:port makes an unusable URL, and Chrome silently ignores
+# --unsafely-treat-insecure-origin-as-secure unless the origin has a scheme -
+# which costs you the camera without any visible error.
+case "$SERVER" in
+  http://*|https://*) ;;
+  *) SERVER="http://$SERVER" ;;
+esac
+SERVER="${SERVER%/}"
 
 URL="$SERVER/table/?room=$ROOM"
 

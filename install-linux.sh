@@ -162,6 +162,15 @@ install_table() {
   [ -n "$room" ]   || die "--room needs a value (A or B)"
   [ -n "$server" ] || die "--server needs a value, e.g. http://192.168.1.20:8990"
 
+  # A bare host:port is the easy mistake here. It produces a nonsense URL and,
+  # worse, Chrome ignores --unsafely-treat-insecure-origin-as-secure for an
+  # origin with no scheme - so the table loads but never gets its camera.
+  case "$server" in
+    http://*|https://*) ;;
+    *) server="http://$server"
+       echo "  (no scheme given, using $server)" ;;
+  esac
+
   # Trailing slash would turn the URL into a double-slash and break the
   # secure-origin flag matching.
   server="${server%/}"
@@ -291,6 +300,13 @@ check_table() {
   # 6. can we actually reach the server the entry points at
   local server
   server="$(sed -n 's/.*SERVER=\([^ ]*\).*/\1/p' "$AUTOSTART_PATH" 2>/dev/null || true)"
+  case "${server:-http://placeholder}" in
+    http://*|https://*) ;;
+    *) bad "SERVER in the autostart entry has no scheme: $server
+        Chrome ignores --unsafely-treat-insecure-origin-as-secure for a
+        schemeless origin, so the table would load but never get a camera.
+        Re-run: $0 table --room A --server http://$server" ;;
+  esac
   if [ -n "$server" ] && command -v curl >/dev/null 2>&1; then
     if curl -fsS --max-time 4 -o /dev/null "$server/api/health"; then
       good "VS server answering at $server"
