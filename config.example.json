@@ -27,7 +27,7 @@
     "//armedOnly": "true = teams can only earn/fire sabotages while the operator (or Quandary) has armed the match.",
     "maxSabotagesPerTeam": 0,
     "//maxSabotagesPerTeam": "0 = unlimited",
-    "minigames": ["flappy", "simon", "runner", "flow", "reaction", "memory"],
+    "minigames": ["flappy", "simon", "runner", "flow", "reaction", "memory", "cutrope"],
     "//minigames": "Pool the server draws from at random. Remove ids to disable a game.",
     "avoidRepeatCount": 2,
     "//avoidRepeatCount": "Don't hand a team the same game again until N other games have been played."

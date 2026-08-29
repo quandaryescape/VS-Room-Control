@@ -36,7 +36,7 @@ not modified.**
 1. The GM arms the VS round from the operator dashboard (or a puzzle in
    Quandary does it via a webhook).
 2. A team taps the one giant button on their table: **PLAY FOR A SABOTAGE**.
-3. They're dealt a random mini-game — one of six, from threading a drone
+3. They're dealt a random mini-game — one of seven, from threading a drone
    through laser gates to linking pairs without crossing a line. 60–90
    seconds. See [Mini-games](#mini-games) for the full set.
 4. Win, and they get a menu of sabotages to fire at the *other* room. Lose, and
@@ -326,7 +326,7 @@ dashboard, which pings the lights, both Wall Player PCs, and Quandary.
 | Folder | What it is | Runs on |
 |---|---|---|
 | `server/` | VS server: match state, sabotage routing, hardware adapters | one machine |
-| `table/` | the touchscreen UI and the six mini-games | each table PC (browser) |
+| `table/` | the touchscreen UI and the seven mini-games | each table PC (browser) |
 | `operator/` | GM dashboard for the VS layer | any browser |
 | `wallplayer/` | **modified** Wall Player — adds a sabotage API | each projector PC |
 
@@ -354,6 +354,7 @@ Every game is drawn procedurally — no image assets — so they scale from a
 | 🔀 | **Reroute** | Drag between matching dots to link every pair | Link all pairs, no path crossing another | 90s |
 | 🎯 | **Whack** | Tap green targets, never tap a red one | 12 hits — but 3 mistakes loses it | 60s |
 | 🧠 | **Recall** | Flip two cards at a time to find matching pairs | All 8 pairs within 6 wrong guesses | 90s |
+| ✂️ | **Cut The Line** | Swipe across a rope to sever it; gravity does the rest | Land the core in the collector 3 times — 5 drops loses | 90s |
 
 Lose, and the team waits 20 seconds before being dealt another. Win, and they
 pick a sabotage to fire next door, then go on a two-minute cooldown.
@@ -410,7 +411,7 @@ Escape rooms fail in the dark, so every effect is built to expire on its own:
 ## Further reading
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — how the pieces talk, and the state machine
-- [docs/MINIGAMES.md](docs/MINIGAMES.md) — the six games, difficulty tuning, and adding your own
+- [docs/MINIGAMES.md](docs/MINIGAMES.md) — the seven games, difficulty tuning, and adding your own
 - [docs/QUANDARYCONTROL.md](docs/QUANDARYCONTROL.md) — exactly how the bridge works, and how to drive VS from a puzzle
 - [docs/HARDWARE.md](docs/HARDWARE.md) — lights, cameras, audio, projectors, network
 - [docs/SABOTAGES.md](docs/SABOTAGES.md) — the catalog, tuning, and adding your own

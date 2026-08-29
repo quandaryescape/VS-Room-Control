@@ -21,6 +21,7 @@ const CATALOG = [
   { id: 'flow',     name: 'Reroute',      blurb: 'Link every pair without crossing a line.',   timeLimit: 90, defuse: false },
   { id: 'reaction', name: 'Whack',        blurb: 'Hit the live targets. Miss the dead ones.',  timeLimit: 60, defuse: true },
   { id: 'memory',   name: 'Recall',       blurb: 'Eight pairs, six wrong guesses.',              timeLimit: 90, defuse: false },
+  { id: 'cutrope',  name: 'Cut The Line', blurb: 'Swipe to cut. Drop the core in.',           timeLimit: 90, defuse: false },
 ];
 
 const BY_ID = new Map(CATALOG.map(g => [g.id, g]));

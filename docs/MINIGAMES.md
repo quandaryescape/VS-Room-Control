@@ -1,6 +1,6 @@
 # Mini-games
 
-Six games. The server deals one at random when a team taps **PLAY FOR A
+Seven games. The server deals one at random when a team taps **PLAY FOR A
 SABOTAGE**, avoiding whatever they were given in the last couple of rounds.
 
 | id | Name | Win condition | Lose condition | Defuse? |
@@ -11,6 +11,7 @@ SABOTAGE**, avoiding whatever they were given in the last couple of rounds.
 | `flow` | Reroute | Link all pairs without crossing | Clock only | — |
 | `reaction` | Whack | 12 green targets | 3 red targets | ✓ |
 | `memory` | Recall | 8 pairs | 6 wrong guesses | — |
+| `cutrope` | Cut The Line | 3 cores delivered | 5 drops | — |
 
 "Defuse?" marks the games eligible for the Speed Trap's defuse challenge, where
 a team has 30 seconds and is panicking. That is a tighter bar than it looks, so
@@ -94,6 +95,75 @@ The encoding is `"WH"` followed by four digits per pair — `ax ay bx by`:
 
 Grids are capped at 9×9 by the single-digit encoding, which is well past what
 is playable on a table under a 90-second clock.
+
+---
+
+## Cut The Line, and why the rope is not a rope
+
+A Cut the Rope clone. The core hangs from one or more ropes; swipe across a
+rope to sever it; whatever swing has been built up decides where it lands. Land
+three cores in the collector to win. Five drops and the round is lost.
+
+### One particle, not a chain
+
+The obvious way to build this is a chain of rope segments with the core on the
+end. Don't. A segmented rope carrying a heavy mass is a spring, and it needs a
+lot of solver iterations per frame before it stops behaving like one — get it
+wrong and the core is flung off the top of the screen, which is not a thing
+anyone wants to explain to a team mid-game.
+
+Instead the core is a single verlet particle, and each rope is a *maximum
+distance constraint* back to its anchor:
+
+```js
+if (dist > len) {           // taut — pull the core back onto the circle
+  pos.x = ax + (dx / dist) * len;
+  pos.y = ay + (dy / dist) * len;
+}                           // slack — the rope does nothing at all
+```
+
+That is the entire rope model, and it is unconditionally stable: a constraint
+can only ever move the core *closer* to where it should be. Six passes are
+enough for two ropes to settle against each other rather than fight. Because
+verlet infers velocity from the gap between positions, a constraint that moves
+the core also correctly changes its speed — the pendulum swing comes out for
+free rather than being animated.
+
+The rope is *drawn* with a sag proportional to its slack, so a taut rope reads
+as a straight line under tension and a slack one visibly droops. That is the
+only cue a player needs to see which rope is currently carrying the core.
+
+### Cutting tests the segment, not the point
+
+A fast swipe on a 4K table moves hundreds of pixels between pointer events. A
+cut that asks "is the finger on a rope right now" misses almost every fast
+swipe, and a fast swipe is exactly what a player under time pressure does. So
+each move event tests the **segment the finger just travelled** against the
+rope, with a standard segment-intersection test.
+
+### The levels are hand-authored, for the same reason Reroute's are
+
+An unsolvable physics layout is not recoverable in front of customers, and
+unlike Numberlink there is no cheap solver to verify a random one. So the
+layouts are written by hand under two rules:
+
+- the collector sits inside the arc the core can actually reach, so cutting at
+  the right moment always works;
+- bumpers only ever deflect. None of them forms a concave pocket that could
+  trap the core, and a contact applies a small sideways jitter so the core
+  cannot balance on the exact top of one.
+
+The three levels teach, then test: a single rope straight above the collector,
+then two ropes with the collector off to one side, then the same mirrored with
+a bumper that punishes dropping it straight down and hoping.
+
+### Why it is not a defuse game
+
+A Speed Trap defuse has to be winnable in 30 seconds by someone panicking.
+Cut The Line asks for three separate deliveries, each needing a swing to build
+before the cut is worth making, so it is `defuse: false`. If you want a
+shorter variant for defusal, drop `DELIVERIES_TO_WIN` to 1 and time the floor
+before changing the flag — see the table at the top of this file.
 
 ---
 
