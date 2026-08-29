@@ -29,6 +29,25 @@ if [ "$(id -u)" -eq 0 ]; then
   exit 1
 fi
 
+# ---- options -------------------------------------------------------------
+# --windowed drops kiosk mode but keeps the same profile and the same flags,
+# so you get an address bar and DevTools against exactly the browser state the
+# table runs with. Camera permission is stored per --user-data-dir, so
+# granting it in your everyday Chromium does nothing for the kiosk - it has to
+# be granted inside this profile.
+WINDOWED=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --windowed|--debug) WINDOWED=1; shift ;;
+    -h|--help)
+      echo "Usage: [ROOM=A] [SERVER=http://host:8990] $0 [--windowed]"
+      echo "  --windowed  same profile and flags, but not full-screen kiosk."
+      echo "              Use it to reach chrome://settings and DevTools."
+      exit 0 ;;
+    *) echo "Unknown option: $1 (try --help)"; exit 1 ;;
+  esac
+done
+
 # ---- per-table settings --------------------------------------------------
 # Normally these arrive from the autostart entry, which passes them as
 # "env ROOM=A SERVER=http://... start-table.sh". When you run this by hand
@@ -199,8 +218,23 @@ case "$SERVER" in
 esac
 
 echo "Launching table $ROOM against $SERVER"
+if [ "$WINDOWED" -eq 1 ]; then
+  MODE_FLAGS=(--new-window "$URL")
+  echo
+  echo "  Windowed mode - same profile and flags as the kiosk."
+  echo "  To allow the camera for THIS profile:"
+  echo "    click the icon left of the address bar > Site settings > Camera"
+  echo "    > Allow, then reload. Or open chrome://settings/content/camera"
+  echo "  To see whether the origin counts as secure at all, press F12 and run:"
+  echo "    isSecureContext          -> must be true, or there is no camera"
+  echo "    navigator.mediaDevices   -> undefined means the origin is insecure"
+  echo
+else
+  MODE_FLAGS=(--kiosk "$URL")
+fi
+
 exec "$BROWSER" \
-  --kiosk "$URL" \
+  "${MODE_FLAGS[@]}" \
   --user-data-dir="$PROFILE" \
   ${ORIGIN_FLAGS[@]+"${ORIGIN_FLAGS[@]}"} \
   --use-fake-ui-for-media-stream \

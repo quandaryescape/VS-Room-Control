@@ -148,6 +148,32 @@ opening — the table PC is usually up before the server box is — disables scr
 blanking, and clears Chrome's "didn't shut down properly" prompt, which on a
 kiosk is a dialog nobody can dismiss.
 
+### Reaching Chromium's site settings for the kiosk profile
+
+Camera permission is stored **per profile**, and the kiosk runs with its own
+`--user-data-dir`. Granting the camera in your everyday Chromium has no effect
+on it. Kiosk mode also has no address bar, so there's nowhere to click.
+
+Run the launcher windowed — same profile, same flags, just not full-screen:
+
+```bash
+./start-table.sh --windowed
+```
+
+Then click the icon at the left of the address bar → **Site settings** →
+**Camera** → **Allow**, or go to `chrome://settings/content/camera`.
+
+If the camera entry isn't offered at all, the origin isn't considered secure
+and no amount of clicking will help. Press **F12** and check in the console:
+
+```
+isSecureContext          // must be true, or there is no camera API at all
+navigator.mediaDevices   // undefined means the origin is insecure
+```
+
+`false`/`undefined` there means the insecure-origin flag isn't taking effect on
+this build — serve the tables over HTTPS instead (see above).
+
 ### Serving the tables over HTTPS
 
 Chrome only grants camera access on a secure origin. `start-table.sh` works
