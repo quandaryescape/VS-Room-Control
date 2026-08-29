@@ -148,6 +148,57 @@ opening — the table PC is usually up before the server box is — disables scr
 blanking, and clears Chrome's "didn't shut down properly" prompt, which on a
 kiosk is a dialog nobody can dismiss.
 
+### Serving the tables over HTTPS
+
+Chrome only grants camera access on a secure origin. `start-table.sh` works
+around that with `--unsafely-treat-insecure-origin-as-secure`; if that flag
+isn't taking effect on your build, serve the tables over TLS instead and the
+problem goes away at the source.
+
+HTTPS here is **additive**. Plain HTTP stays on `port` for the Wall Player PCs
+(mpv reads the camera relay from the command line) and Quandary's webhooks —
+neither should have to trust a private CA. Only the tables move to
+`httpsPort`.
+
+A self-signed certificate is worse than useless on a kiosk: Chrome puts a
+full-page interstitial in front of it that nobody can dismiss on a touchscreen
+with no keyboard. Use `mkcert`, which creates a small local CA and issues from
+it, so the browser is simply satisfied.
+
+On the **server**:
+
+```bash
+sudo apt install -y mkcert libnss3-tools
+```
+
+```bash
+./install-linux.sh cert --host 192.168.0.167
+```
+
+Then set `tls.enabled` to `true` in `config.json` and restart:
+
+```bash
+sudo systemctl restart vs-server
+```
+
+On each **table PC**, copy `rootCA.pem` off the server (its location is printed
+by the command above, or `mkcert -CAROOT`) and install it:
+
+```bash
+./install-linux.sh trust-cert --ca /path/to/rootCA.pem
+```
+
+That writes into `~/.pki/nssdb`, which Chrome reads regardless of
+`--user-data-dir` — so it survives the kiosk's throwaway profile. Finally point
+the table at the HTTPS URL:
+
+```bash
+./install-linux.sh table --room A --server https://192.168.0.167:8443
+```
+
+`start-table.sh` drops the insecure-origin flag automatically when the server
+URL is `https://`.
+
 ### When a table doesn't come up on its own
 
 Autostart entries run when a **desktop session starts**, not when the machine

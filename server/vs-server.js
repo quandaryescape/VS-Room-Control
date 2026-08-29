@@ -14,6 +14,7 @@
 // Wall Player PCs, and Quandary Control).
 
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -31,6 +32,7 @@ const minigames = require('./lib/minigames');
 const config = configLib.load();
 const ROOT = configLib.ROOT;
 const PORT = config.port || 8990;
+const HTTPS_PORT = config.httpsPort || 8443;
 
 // ---------- bridges + engine ----------
 
@@ -152,7 +154,7 @@ function operatorAllowed(req, url) {
 
 // ---------- server ----------
 
-const server = http.createServer(async (req, res) => {
+const requestHandler = async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const route = req.method + ' ' + url.pathname;
 
@@ -350,11 +352,40 @@ const server = http.createServer(async (req, res) => {
     log.error('request failed', { path: url.pathname, error: err.message });
     return json(res, 500, { ok: false, error: err.message });
   }
-});
+};
+
+// ---------- listeners ----------
+
+// Plain HTTP is always on. The Wall Player PCs pull the camera relay with
+// mpv and Quandary posts webhooks; neither should have to trust a private
+// certificate authority to do it.
+const server = http.createServer(requestHandler);
+
+// HTTPS is optional and purely additive. Chrome only hands out cameras on a
+// secure origin, so a table served over TLS needs no
+// --unsafely-treat-insecure-origin-as-secure flag and no throwaway profile.
+// Point the tables at HTTPS_PORT and leave everything else on PORT.
+let httpsServer = null;
+if (config.tls && config.tls.enabled) {
+  try {
+    httpsServer = https.createServer({
+      key: fs.readFileSync(path.resolve(ROOT, config.tls.key)),
+      cert: fs.readFileSync(path.resolve(ROOT, config.tls.cert)),
+    }, requestHandler);
+  } catch (err) {
+    // A missing or unreadable cert must not take the whole room offline —
+    // HTTP still works, it just costs the tables the browser flag again.
+    log.error('TLS is configured but could not start — serving HTTP only', {
+      error: err.message,
+    });
+    httpsServer = null;
+  }
+}
 
 // ---------- socket.io ----------
 
 const io = new Server(server, { cors: { origin: '*' } });
+if (httpsServer) io.attach(httpsServer, { cors: { origin: '*' } });
 
 // Engine pushes go out through here. roomKey === null means "operators only".
 engine.emit = (roomKey, event, payload) => {
@@ -455,6 +486,14 @@ server.listen(PORT, '0.0.0.0', () => {
     for (const key of Object.keys(config.rooms)) {
       console.log(`  Table ${key.padEnd(12)}: http://${ip}:${PORT}/table/?room=${key}`);
     }
+    if (httpsServer) {
+      console.log('');
+      console.log('  HTTPS is on. Point the tables at these — a secure origin');
+      console.log('  gets the camera with no browser flags:');
+      for (const key of Object.keys(config.rooms)) {
+        console.log(`  Table ${key.padEnd(12)}: https://${ip}:${HTTPS_PORT}/table/?room=${key}`);
+      }
+    }
     break;
   }
   console.log('');
@@ -463,6 +502,15 @@ server.listen(PORT, '0.0.0.0', () => {
   }
   console.log('');
 });
+
+if (httpsServer) {
+  httpsServer.listen(HTTPS_PORT, '0.0.0.0', () => {
+    log.info(`HTTPS listening on ${HTTPS_PORT}`);
+  });
+  httpsServer.on('error', err => {
+    log.error('HTTPS listener failed — HTTP is unaffected', { error: err.message });
+  });
+}
 
 function shutdown(signal) {
   log.info(`${signal} received — restoring rooms and shutting down`);

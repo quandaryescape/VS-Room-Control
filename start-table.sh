@@ -178,11 +178,31 @@ if [ -f "$PROFILE/Default/Preferences" ]; then
     "$PROFILE/Default/Preferences" 2>/dev/null || true
 fi
 
+# --- assemble the command line -------------------------------------------
+# Over HTTPS the origin is already secure, so the insecure-origin override is
+# not just unnecessary - passing it alongside a https:// origin is a good way
+# to confuse Chrome. Only add it when we are actually on http://.
+ORIGIN_FLAGS=()
+case "$SERVER" in
+  https://*)
+    echo "HTTPS origin - camera permission needs no override flag."
+    ;;
+  *)
+    ORIGIN_FLAGS=(
+      --unsafely-treat-insecure-origin-as-secure="$SERVER"
+      # Some Chrome builds want the matching feature enabled alongside the
+      # origin list. Unknown feature names are ignored, so this is harmless
+      # where it is not needed and fixes the builds where it is.
+      --enable-features=UnsafelyTreatInsecureOriginAsSecure
+    )
+    ;;
+esac
+
 echo "Launching table $ROOM against $SERVER"
 exec "$BROWSER" \
   --kiosk "$URL" \
   --user-data-dir="$PROFILE" \
-  --unsafely-treat-insecure-origin-as-secure="$SERVER" \
+  ${ORIGIN_FLAGS[@]+"${ORIGIN_FLAGS[@]}"} \
   --use-fake-ui-for-media-stream \
   --autoplay-policy=no-user-gesture-required \
   --disable-features=TranslateUI,MediaRouter \

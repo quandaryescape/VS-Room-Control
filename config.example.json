@@ -4,6 +4,14 @@
   "port": 8990,
   "operatorPin": "",
 
+  "httpsPort": 8443,
+  "tls": {
+    "enabled": false,
+    "key": "certs/server-key.pem",
+    "cert": "certs/server-cert.pem",
+    "//": "Optional and additive. HTTP on 'port' always stays up for the Wall Players (mpv reads the camera relay) and Quandary webhooks. Turning this on ADDS an HTTPS listener on 'httpsPort' for the tables - a secure origin means the camera works with no Chrome flags. Make a trusted cert with: ./install-linux.sh cert --host 192.168.1.20"
+  },
+
   "quandary": {
     "enabled": true,
     "url": "http://127.0.0.1:3000",

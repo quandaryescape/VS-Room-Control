@@ -16,6 +16,14 @@
 #         exec bits, automatic login, browser, and whether the VS server is
 #         answering. Run it as the table user on the table PC.
 #
+#    ./install-linux.sh cert --host 192.168.1.20
+#         Issues a browser-trusted certificate with mkcert so the tables can
+#         be served over HTTPS. Run on the SERVER, then set tls.enabled in
+#         config.json. A secure origin gets the camera with no Chrome flags.
+#
+#    ./install-linux.sh trust-cert --ca /path/to/rootCA.pem
+#         Installs that CA on a TABLE PC so its browser accepts the cert.
+#
 #    sudo ./install-linux.sh uninstall-server
 #         ./install-linux.sh uninstall-table
 #
@@ -358,11 +366,94 @@ check_table() {
   echo
 }
 
+
+# ------------------------------------------------------------------ cert ---
+# A self-signed certificate is worse than useless on a kiosk: Chrome puts a
+# full-page interstitial in front of it that nobody can dismiss on a
+# touchscreen. mkcert instead creates a little local CA, installs it into this
+# machine's trust stores, and issues a cert from it - so the browser is simply
+# happy. Run this on the SERVER to make the cert, then run
+# "install-linux.sh trust-cert" on each table PC.
+make_cert() {
+  local host="" days=825
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --host) host="${2:-}"; shift 2 ;;
+      *) die "Unknown option: $1" ;;
+    esac
+  done
+  [ -n "$host" ] || die "Need the address the tables will use, e.g.
+    $0 cert --host 192.168.0.167"
+
+  command -v mkcert >/dev/null 2>&1 || die "mkcert is not installed.
+    sudo apt install -y mkcert libnss3-tools
+    (or grab a release from https://github.com/FiloSottile/mkcert)"
+
+  mkdir -p "$HERE/certs"
+  echo "  Creating the local CA (no-op if it already exists)"
+  mkcert -install
+
+  echo "  Issuing a certificate for $host"
+  ( cd "$HERE/certs" && mkcert -cert-file server-cert.pem -key-file server-key.pem "$host" localhost 127.0.0.1 )
+
+  chmod 600 "$HERE/certs/server-key.pem"
+  echo
+  echo "  Wrote $HERE/certs/"
+  echo "  Now set this in config.json and restart the service:"
+  echo '      "tls": { "enabled": true, "key": "certs/server-key.pem", "cert": "certs/server-cert.pem" }'
+  echo "      sudo systemctl restart vs-server"
+  echo
+  echo "  The CA lives at: $(mkcert -CAROOT)"
+  echo "  Copy rootCA.pem from there to each table PC and run:"
+  echo "      ./install-linux.sh trust-cert --ca /path/to/rootCA.pem"
+}
+
+# Install someone else's mkcert CA into THIS machine's trust stores, so the
+# kiosk browser accepts the server's certificate.
+trust_cert() {
+  local ca=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --ca) ca="${2:-}"; shift 2 ;;
+      *) die "Unknown option: $1" ;;
+    esac
+  done
+  [ -n "$ca" ] && [ -r "$ca" ] || die "Need the CA file copied from the server:
+    $0 trust-cert --ca /path/to/rootCA.pem
+    (find it on the server with: mkcert -CAROOT)"
+
+  command -v certutil >/dev/null 2>&1 || die "certutil is missing.
+    sudo apt install -y libnss3-tools"
+
+  # Chrome on Linux reads the per-user NSS database, not the system store, and
+  # it does so regardless of --user-data-dir - so this survives the kiosk's
+  # throwaway profile.
+  mkdir -p "$HOME/.pki/nssdb"
+  [ -f "$HOME/.pki/nssdb/cert9.db" ] || certutil -N --empty-password -d sql:"$HOME/.pki/nssdb"
+  certutil -d sql:"$HOME/.pki/nssdb" -A -t "C,," -n "VS Room Control local CA" -i "$ca"
+  echo "  Added the CA to $HOME/.pki/nssdb"
+
+  # The system store as well, so curl and mpv are happy too.
+  if [ -d /usr/local/share/ca-certificates ] && [ "$(id -u)" -eq 0 ]; then
+    cp "$ca" /usr/local/share/ca-certificates/vs-room-control.crt
+    update-ca-certificates >/dev/null 2>&1 || true
+    echo "  Added the CA to the system trust store"
+  else
+    echo "  For curl/mpv as well, run once with sudo:"
+    echo "      sudo $0 trust-cert --ca $ca"
+  fi
+
+  echo
+  echo "  Now point this table at the HTTPS URL:"
+  echo "      $0 table --room A --server https://<server>:8443"
+}
 # ------------------------------------------------------------------ main ---
 case "${1:-}" in
   server)            shift; install_server "$@" ;;
   table)             shift; install_table "$@" ;;
   check-table)       shift; check_table ;;
+  cert)              shift; make_cert "$@" ;;
+  trust-cert)        shift; trust_cert "$@" ;;
   uninstall-server)  shift; uninstall_server ;;
   uninstall-table)   shift; uninstall_table ;;
   *) usage ;;
