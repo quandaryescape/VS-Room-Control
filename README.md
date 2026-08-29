@@ -409,6 +409,35 @@ Escape rooms fail in the dark, so every effect is built to expire on its own:
 
 ---
 
+## Settings screen
+
+The operator dashboard has a **Settings** button linking to
+`/operator/settings.html`. It edits the parts of `config.json` that are worth
+changing between games:
+
+- **Mini-games in the pool** — which games the server may deal
+- **Rules** — cooldown, lockout, mini-game time limit, sabotage choice window,
+  max sabotages per team, avoid-repeat count, and `armedOnly`
+- **Sabotages** — enable/disable each one, rename it, and edit its numeric
+  parameters (durations, multipliers)
+
+Changes apply **live** — the running engine reads the same config object, so
+there is no restart — and are written back to `config.json`.
+
+Two things it deliberately will not touch. **Hardware wiring** — light drivers
+and device addresses, Wall Player URLs and tokens, Quandary room IDs — stays
+hand-edited, because a dashboard that can break a hardware binding between two
+games gives you a sabotage that silently does nothing and no clue why. And your
+**`//` comments survive a save**: the screen re-reads `config.json` from disk
+and edits that, rather than serialising the in-memory config, which has been
+merged with defaults and had every documentation key stripped out.
+
+The screen sits behind the same `operatorPin` as the rest of the dashboard, and
+the dashboard carries the pin across in the link. Reaching it directly means
+adding `?pin=…` yourself.
+
+---
+
 ## Further reading
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — how the pieces talk, and the state machine

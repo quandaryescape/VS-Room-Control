@@ -11,6 +11,13 @@
   const $ = id => document.getElementById(id);
   const pin = new URLSearchParams(location.search).get('pin') || '';
 
+  // The settings screen is behind the same PIN. Without carrying it across,
+  // the link lands on a page that can only report that it was refused.
+  if (pin) {
+    const link = document.getElementById('settingsLink');
+    if (link) link.href = 'settings.html?pin=' + encodeURIComponent(pin);
+  }
+
   let snapshot = null;
   let catalog = null;
   let lastLogTs = 0;

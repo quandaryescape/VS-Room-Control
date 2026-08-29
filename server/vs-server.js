@@ -283,6 +283,119 @@ const requestHandler = async (req, res) => {
       if (!operatorAllowed(req, url)) return json(res, 401, { ok: false, error: 'operator PIN required' });
     }
 
+    // ----- settings screen -----
+    // Only rules and sabotages are editable here. Room wiring, light drivers,
+    // Wall Player URLs and tokens stay hand-edited: a dashboard that can break
+    // the hardware bindings between two games is a liability, and getting them
+    // wrong is not obvious until a sabotage silently does nothing.
+    if (route === 'GET /api/admin/settings') {
+      return json(res, 200, {
+        ok: true,
+        rules: config.rules,
+        sabotages: sabotages.CATALOG.map(s => ({
+          id: s.id,
+          label: sabotages.labelFor(s.id, config),
+          defaultLabel: s.label,
+          blurb: s.blurb,
+          icon: s.icon,
+          needs: s.needs,
+          enabled: sabotages.isEnabled(s.id, config),
+          params: sabotages.paramsFor(s.id, config),
+        })),
+        minigames: minigames.CATALOG.map(m => ({
+          id: m.id,
+          name: m.name,
+          blurb: m.blurb,
+          defuse: m.defuse,
+          timeLimit: m.timeLimit,
+          enabled: (config.rules.minigames || []).includes(m.id),
+        })),
+      });
+    }
+
+    if (route === 'POST /api/admin/settings') {
+      const body = await readBody(req);
+      const patch = {};
+      const problems = [];
+
+      const num = (value, min, max, label) => {
+        const v = Number(value);
+        if (!Number.isFinite(v)) { problems.push(`${label} must be a number`); return null; }
+        if (v < min || v > max) { problems.push(`${label} must be between ${min} and ${max}`); return null; }
+        return v;
+      };
+
+      if (body.rules) {
+        const r = {};
+        const limits = {
+          cooldownSeconds: [0, 3600],
+          lockoutSeconds: [0, 3600],
+          minigameTimeLimitSeconds: [0, 900],
+          sabotageChoiceSeconds: [5, 300],
+          maxSabotagesPerTeam: [0, 99],
+          avoidRepeatCount: [0, 7],
+        };
+        for (const [key, [min, max]] of Object.entries(limits)) {
+          if (body.rules[key] === undefined) continue;
+          const v = num(body.rules[key], min, max, key);
+          if (v !== null) r[key] = Math.round(v);
+        }
+        if (body.rules.armedOnly !== undefined) r.armedOnly = !!body.rules.armedOnly;
+
+        if (body.rules.minigames !== undefined) {
+          const wanted = Array.isArray(body.rules.minigames) ? body.rules.minigames : [];
+          const known = wanted.filter(id => minigames.get(id));
+          const unknown = wanted.filter(id => !minigames.get(id));
+          if (unknown.length) problems.push(`unknown mini-games: ${unknown.join(', ')}`);
+          // An empty pool is not a configuration, it is a room that cannot
+          // deal a game at all — and the failure shows up as a dead button in
+          // front of players rather than as an error here.
+          if (!known.length) problems.push('at least one mini-game must stay enabled');
+          else r.minigames = known;
+        }
+        patch.rules = r;
+      }
+
+      if (body.sabotages) {
+        const out = {};
+        for (const [id, entry] of Object.entries(body.sabotages)) {
+          const def = sabotages.get(id);
+          if (!def) { problems.push(`unknown sabotage: ${id}`); continue; }
+          const clean = {};
+          if (entry.enabled !== undefined) clean.enabled = !!entry.enabled;
+          if (entry.label !== undefined) {
+            const label = String(entry.label).trim().slice(0, 40);
+            if (label) clean.label = label;
+          }
+          // Only keys the catalog already declares as numeric defaults are
+          // writable, so the screen cannot invent parameters the sabotage
+          // will never read.
+          for (const [key, fallback] of Object.entries(def.defaults || {})) {
+            if (typeof fallback !== 'number' || entry[key] === undefined) continue;
+            const v = num(entry[key], 0, 86400, `${id}.${key}`);
+            if (v !== null) clean[key] = v;
+          }
+          out[id] = clean;
+        }
+        patch.sabotages = out;
+      }
+
+      if (problems.length) return json(res, 400, { ok: false, error: problems.join('; ') });
+      if (!patch.rules && !patch.sabotages) {
+        return json(res, 400, { ok: false, error: 'nothing to change' });
+      }
+
+      configLib.savePatch(patch);
+      log.info('settings updated', { sections: Object.keys(patch) });
+      // Push the new numbers straight to the tables and the dashboard, so the
+      // cooldown a player is watching matches what was just saved.
+      io.to('operators').emit('operator', engine.operatorSnapshot());
+      for (const key of Object.keys(config.rooms)) {
+        io.to('table:' + key).emit('state', engine.snapshot(key));
+      }
+      return json(res, 200, { ok: true, rules: config.rules });
+    }
+
     if (route === 'GET /api/operator') {
       return json(res, 200, { ok: true, state: engine.operatorSnapshot() });
     }
