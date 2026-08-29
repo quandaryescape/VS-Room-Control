@@ -27,7 +27,7 @@
     "//armedOnly": "true = teams can only earn/fire sabotages while the operator (or Quandary) has armed the match.",
     "maxSabotagesPerTeam": 0,
     "//maxSabotagesPerTeam": "0 = unlimited",
-    "minigames": ["flappy", "simon", "runner", "flow", "reaction", "memory", "cutrope", "brawl"],
+    "minigames": ["flappy", "simon", "runner", "flow", "reaction", "memory", "cutrope", "brawl", "scaffold"],
     "difficulty": "normal",
     "//difficulty": "easy | normal | hard. Scales every mini-game's win and lose thresholds. 'normal' is each game exactly as it was tuned. Set from the operator Settings screen; applies without a restart.",
     "//minigames": "Pool the server draws from at random. Remove ids to disable a game.",

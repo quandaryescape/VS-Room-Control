@@ -110,20 +110,14 @@ VSGames.register({
     // segments crosses it, which is why this tests the segment the finger just
     // travelled rather than the point it is at now — at speed those points are
     // far apart and a point test misses the rope between them entirely.
-    function segmentsCross(p1, p2, p3, p4) {
-      const d = (p2.x - p1.x) * (p4.y - p3.y) - (p2.y - p1.y) * (p4.x - p3.x);
-      if (Math.abs(d) < 1e-9) return false;
-      const u = ((p3.x - p1.x) * (p4.y - p3.y) - (p3.y - p1.y) * (p4.x - p3.x)) / d;
-      const v = ((p3.x - p1.x) * (p2.y - p1.y) - (p3.y - p1.y) * (p2.x - p1.x)) / d;
-      return u >= 0 && u <= 1 && v >= 0 && v <= 1;
-    }
+    // The intersection test itself is api.segmentsCross, shared with Scaffold.
 
     function trySlice(from, to) {
       if (settling) return;
       for (const rope of ropes) {
         if (rope.cut) continue;
         const anchor = { x: rope.ax * api.w, y: rope.ay * api.h };
-        if (!segmentsCross(from, to, anchor, pos)) continue;
+        if (!api.segmentsCross(from, to, anchor, pos)) continue;
 
         rope.cut = true;
         api.beep(880, 60, 'triangle', 0.09);

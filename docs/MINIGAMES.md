@@ -1,6 +1,6 @@
 # Mini-games
 
-Eight games. The server deals one at random when a team taps **PLAY FOR A
+Nine games. The server deals one at random when a team taps **PLAY FOR A
 SABOTAGE**, avoiding whatever they were given in the last couple of rounds.
 
 | id | Name | Win condition | Lose condition | Defuse? |
@@ -13,6 +13,7 @@ SABOTAGE**, avoiding whatever they were given in the last couple of rounds.
 | `memory` | Recall | 8 pairs | 6 wrong guesses | — |
 | `cutrope` | Cut The Line | 3 cores delivered | 5 drops | — |
 | `brawl` | Street Crew | 3 waves cleared | Shared credits exhausted | — |
+| `scaffold` | Scaffold | Reach the target altitude | Clock only | — |
 
 "Defuse?" marks the games eligible for the Speed Trap's defuse challenge, where
 a team has 30 seconds and is panicking. That is a tighter bar than it looks, so
@@ -237,6 +238,86 @@ that keeps moving. If you want the fuller arcade pacing, either raise
 
 ---
 
+## Scaffold, and why the angle is the whole game
+
+One or two players. The jumper bounces by itself on every landing; the drawer
+draws the platforms it lands on. Reach the target altitude before the clock.
+Solo, the drawer alone decides where it goes. A second player can tap the bar
+at the bottom at any point to take the jumper, gaining steering and a charge
+jump.
+
+### The angle steers the jumper
+
+A landing reflects the jumper's velocity about the drawn line's surface normal.
+A flat platform sends it straight back up; a sloped one throws it sideways.
+
+That one rule is the difference between a game and a chore. Without it, every
+board has the same answer — draw a staircase — and the drawer is a bricklayer.
+With it the drawer is *aiming*, and the solo mode stands up on its own instead
+of being the two-player mode with a player missing.
+
+Two clamps keep it playable:
+
+```js
+if (vy < MIN_BOUNCE * boost) vy = MIN_BOUNCE * boost;   // always real progress
+vx = Math.max(-MAX_VX, Math.min(MAX_VX, vx));           // never uncatchable
+```
+
+Without the first, a shallow graze leaves the jumper dribbling in place.
+Without the second, a steep line fires it across the screen faster than the
+drawer can react — which reads as the game cheating rather than as a bad shot.
+
+### Ink
+
+Drawing spends a budget in proportion to line length, refilled at `INK_REGEN`
+per second. This is what stops the staircase literally, and it is the number
+that sets the whole pace of the game — tune it before anything else. Running
+dry mid-stroke lays down whatever ink remains and ends the line there, rather
+than silently discarding the rest of what the drawer was aiming.
+
+### One-way platforms
+
+Platforms are solid only while the jumper is falling, so a rising jumper passes
+straight through whatever is being built above it. The test is the segment the
+jumper's underside travelled this frame against the platform segment —
+`api.segmentsCross`, shared with Cut The Line. When several cross in one frame
+the highest wins, because falling means that is the one reached first.
+
+### No death
+
+Falling costs altitude and altitude costs time, which is pressure enough for a
+90-second round. The clock is the only way to lose, as with Reroute. Ending the
+round on one mistimed bounce would make the drawer's job feel punitive rather
+than skilful, and in solo the drawer did not even throw the bounce.
+
+### Layout and input
+
+The control bar along the bottom is reserved from the start, even in solo play,
+where it carries the "tap to take the jumper" prompt. Growing it on join would
+resize the field underneath a drawer who is halfway through a stroke.
+
+This game uses `api.onPointers` **exclusively**. `api.onDrag` binds its own
+`pointerdown` on the same layer, so a game using both double-fires every touch.
+Each pointer is routed on the way down — bar to the jumper, anything above it
+to the drawer — which is what stops a second player's tap stealing a stroke in
+progress.
+
+### Difficulty
+
+| | easy | normal | hard |
+|---|---|---|---|
+| Target altitude | 2200 | 3200 | 4400 |
+| Ink capacity | 1500 | 1100 | 850 |
+| Ink regen /s | 420 | 320 | 250 |
+| Gravity | 1500 | 1750 | 2000 |
+| Minimum bounce | 760 | 820 | 860 |
+
+One world unit is one pixel, so altitude numbers can be sanity-checked against
+bounce height directly: apex is `MIN_BOUNCE² / (2 · GRAVITY)`, about 190px on
+normal, so the target is roughly seventeen good bounces.
+
+---
+
 ## Tuning difficulty
 
 Most games have their thresholds as named constants at the top of their file
@@ -262,7 +343,6 @@ costs more than six wrong guesses.
 
 If you want Recall easier, raise `MAX_MISSES` to 7 before you reduce the number
 of pairs; the eight-pair board is what makes it feel like a real memory test.
-
 
 ---
 
