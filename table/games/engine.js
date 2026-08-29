@@ -44,7 +44,7 @@
   // win/lose hooks still fire into a UI that has moved on.
   const liveInstances = new Set();
 
-  function create(id, host, hooks) {
+  function create(id, host, hooks, opts) {
     const def = registry.get(id);
     if (!def) throw new Error('unknown mini-game: ' + id);
 
@@ -86,6 +86,21 @@
       h: layer.clientHeight,
       dpr: Math.min(window.devicePixelRatio || 1, 2),
       beep,
+
+      // 'easy' | 'normal' | 'hard', from rules.difficulty on the server. A
+      // game that has not been tuned simply never asks.
+      difficulty: (opts && opts.difficulty) || 'normal',
+
+      // Pick one of three values for the current difficulty. Games declare
+      // their thresholds as api.tune(easy, normal, hard) so the whole
+      // difficulty curve of a game is readable on one line, rather than
+      // scattered through if-blocks.
+      tune(easy, normal, hard) {
+        const d = (opts && opts.difficulty) || 'normal';
+        if (d === 'easy') return easy;
+        if (d === 'hard') return hard;
+        return normal;
+      },
 
       // Canvas games call this; DOM games just append to api.layer.
       makeCanvas() {

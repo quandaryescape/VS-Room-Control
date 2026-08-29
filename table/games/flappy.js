@@ -13,7 +13,7 @@ VSGames.register({
   mount(api) {
     const { g } = api.makeCanvas();
 
-    const TARGET = 8;
+    const TARGET = api.tune(6, 8, 11);
     const GRAVITY = 1900;
     const FLAP = -620;
 

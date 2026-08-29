@@ -40,11 +40,13 @@
   }
   .badge.warn { color: var(--lamp); border-color: #4a3a1c; }
 
-  label.row {
+  /* Not label.row: the difficulty row is a div, because a <label> wrapping a
+     segmented set of buttons makes every click toggle the label's control. */
+  .row {
     display: flex; align-items: center; justify-content: space-between; gap: 14px;
     padding: 9px 0; border-bottom: 1px solid var(--line);
   }
-  label.row:last-child { border-bottom: 0; }
+  .row:last-child { border-bottom: 0; }
   .row-label { display: flex; flex-direction: column; gap: 3px; }
   .row-hint { color: var(--dim); font-size: 12px; line-height: 1.4; }
 
@@ -57,6 +59,15 @@
   input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--lamp); flex: none; }
 
   .params { margin-top: 10px; border-top: 1px solid var(--line); }
+
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button {
+    border: 0; border-radius: 0; background: var(--panel-2); color: var(--dim);
+    padding: 8px 16px; font-family: var(--mono); font-size: 12px; letter-spacing: .1em;
+    text-transform: uppercase; cursor: pointer;
+  }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button.on { background: var(--lamp); color: #17120a; font-weight: 700; }
 
   .bar {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;

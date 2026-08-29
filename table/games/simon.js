@@ -5,7 +5,7 @@ VSGames.register({
   howto: 'Watch the panels light up, then repeat the pattern. Five rounds to win.',
 
   mount(api) {
-    const ROUNDS_TO_WIN = 5;
+    const ROUNDS_TO_WIN = api.tune(4, 5, 7);
     const PADS = [
       { color: '#35d07f', lit: '#8bffc4', tone: 392 },
       { color: '#ff4d4d', lit: '#ff9d9d', tone: 523 },

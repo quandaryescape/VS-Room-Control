@@ -123,6 +123,9 @@ class Engine {
       soundboardUntil: r.soundboardUntil,
       sabotagesUsed: r.sabotagesUsed,
       maxSabotages: this.rules().maxSabotagesPerTeam,
+      // The mini-games run in the browser, so the setting has to travel with
+      // the state rather than being read from config at the point of use.
+      difficulty: this.rules().difficulty || 'normal',
       sounds: this.config.sounds || [],
       // Totals the table needs to draw progress bars without guessing.
       durations: {

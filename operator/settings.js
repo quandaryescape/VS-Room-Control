@@ -60,6 +60,33 @@
     const host = $('rules');
     host.innerHTML = '';
 
+    // Difficulty first — it is the one people reach for between groups.
+    const diffRow = document.createElement('div');
+    diffRow.className = 'row';
+    diffRow.innerHTML =
+      '<span class="row-label"><span>Difficulty</span>' +
+      '<span class="row-hint">Scales every mini-game’s win and lose thresholds — ' +
+      'how many gates, how many mistakes, how fast the enemies swing. ' +
+      'Normal is each game as it was originally tuned.</span></span>';
+
+    const group = document.createElement('span');
+    group.className = 'seg';
+    for (const level of ['easy', 'normal', 'hard']) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = level;
+      btn.dataset.difficulty = level;
+      btn.className = (rules.difficulty || 'normal') === level ? 'on' : '';
+      btn.addEventListener('click', () => {
+        for (const other of group.querySelectorAll('button')) other.className = '';
+        btn.className = 'on';
+        markDirty();
+      });
+      group.appendChild(btn);
+    }
+    diffRow.appendChild(group);
+    host.appendChild(diffRow);
+
     for (const [key, title, hint, min, max] of RULE_FIELDS) {
       const row = document.createElement('label');
       row.className = 'row';
@@ -285,6 +312,8 @@
     }
     rules.armedOnly = $('armedOnly').checked;
     rules.minigames = enabledMinigames();
+    const chosen = document.querySelector('[data-difficulty].on');
+    if (chosen) rules.difficulty = chosen.dataset.difficulty;
 
     const sabotages = {};
     for (const card of document.querySelectorAll('[data-sabotage]')) {

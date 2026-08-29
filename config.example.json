@@ -28,6 +28,8 @@
     "maxSabotagesPerTeam": 0,
     "//maxSabotagesPerTeam": "0 = unlimited",
     "minigames": ["flappy", "simon", "runner", "flow", "reaction", "memory", "cutrope", "brawl"],
+    "difficulty": "normal",
+    "//difficulty": "easy | normal | hard. Scales every mini-game's win and lose thresholds. 'normal' is each game exactly as it was tuned. Set from the operator Settings screen; applies without a restart.",
     "//minigames": "Pool the server draws from at random. Remove ids to disable a game.",
     "avoidRepeatCount": 2,
     "//avoidRepeatCount": "Don't hand a team the same game again until N other games have been played."

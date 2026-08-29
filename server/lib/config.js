@@ -20,6 +20,7 @@ const DEFAULTS = {
     armedOnly: true,
     maxSabotagesPerTeam: 0,
     minigames: ['flappy', 'simon', 'runner', 'flow', 'reaction', 'memory'],
+    difficulty: 'normal',
     avoidRepeatCount: 2,
   },
   rooms: {},

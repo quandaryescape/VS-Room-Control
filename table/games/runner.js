@@ -13,7 +13,7 @@ VSGames.register({
   mount(api) {
     const { g } = api.makeCanvas();
 
-    const SURVIVE = 30;
+    const SURVIVE = api.tune(22, 30, 42);
     const LANES = 3;
 
     let lane = 1;

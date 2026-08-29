@@ -12,7 +12,7 @@ VSGames.register({
     // player ~4.4 wrong guesses on average and a good one ~5.0, so a limit of
     // 5 would fail even flawless play half the time. At 6 a good player clears
     // it ~70% of the time and a careless one does not - which is the point.
-    const MAX_MISSES = 6;
+    const MAX_MISSES = api.tune(8, 6, 5);
 
     const deck = SYMBOLS.concat(SYMBOLS)
       .map(symbol => ({ symbol, sort: Math.random() }))

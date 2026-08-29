@@ -29,9 +29,22 @@ VSGames.register({
     const { g } = api.makeCanvas();
 
     const MAX_PLAYERS = 4;
-    const PLAYER_HP = 5;
-    const REVIVE_SECONDS = 4;
     const WAVES = 3;
+
+    // Everything that decides how hard this is, on one screen. `normal` is
+    // deliberately harder than the first cut of this game: five pips and a
+    // four-tenths-of-a-second tell meant a crew could stand still, hold HIT
+    // and win, which is not a fight.
+    const PLAYER_HP = api.tune(6, 4, 3);
+    const REVIVE_SECONDS = api.tune(3, 4, 5);
+    const GOON_HP = api.tune(2, 2, 3);
+    const BRUTE_HP = api.tune(6, 8, 11);
+    const GOON_SPEED = api.tune(0.075, 0.098, 0.120);
+    const BRUTE_SPEED = api.tune(0.050, 0.064, 0.078);
+    // The wind-up is the whole defence: it is the window in which stepping off
+    // the line saves you. Shortening it is what makes `hard` actually hard.
+    const WIND_UP = api.tune(0.52, 0.38, 0.28);
+    const SWING_GAP = api.tune([0.9, 1.6], [0.6, 1.2], [0.4, 0.85]);
 
     // The playfield is the top band; the bottom band is controls. Depth (z)
     // runs 0..1 across the walkable strip, which is what gives a beat-'em-up
@@ -55,7 +68,7 @@ VSGames.register({
     // reads fine with four people and is brutal with one - a solo player would
     // lose the instant their last pip went, making the revive timer decorative.
     // A joining player brings a credit with them, which is the coin slot.
-    let lives = 2;
+    let lives = api.tune(3, 2, 1);
     let wave = 0;
     let waveClearedAt = 0;
     let spawning = false;
@@ -225,8 +238,12 @@ VSGames.register({
       const n = Math.max(1, joinedCount());
       // Base difficulty per wave, then roughly one extra body per extra
       // player. A solo player gets a fight; four get a brawl.
-      const base = [2, 3, 1][index] || 2;
-      return Math.max(1, Math.round(base + (n - 1) * (index === 2 ? 0.5 : 1)));
+      const base = api.tune([2, 3, 1], [3, 4, 1], [4, 5, 2])[index] || 3;
+      // The brute wave scales more gently: brutes soak hits, so an extra one
+      // adds far more time to a wave than an extra goon does, and the round
+      // has a clock.
+      const perPlayer = index === 2 ? api.tune(0.3, 0.5, 0.8) : api.tune(0.8, 1.1, 1.4);
+      return Math.max(1, Math.round(base + (n - 1) * perPlayer));
     }
 
     function makeEnemy(kind) {
@@ -235,9 +252,9 @@ VSGames.register({
         kind,
         x: fromLeft ? -api.w * 0.08 : api.w * 1.08,
         z: api.rand(0.12, 0.9),
-        hp: kind === 'brute' ? 6 : 2,
-        maxHp: kind === 'brute' ? 6 : 2,
-        speed: kind === 'brute' ? 0.055 : 0.085,
+        hp: kind === 'brute' ? BRUTE_HP : GOON_HP,
+        maxHp: kind === 'brute' ? BRUTE_HP : GOON_HP,
+        speed: kind === 'brute' ? BRUTE_SPEED : GOON_SPEED,
         stun: 0,
         knock: 0,
         wind: 0,               // wind-up before a swing, so it can be dodged
@@ -354,13 +371,13 @@ VSGames.register({
             if (Math.abs(target.x - e.x) < reach * 1.25 && Math.abs(target.z - e.z) < 0.13) {
               hurtPlayer(target, e.x);
             }
-            e.cool = api.rand(0.7, 1.4);
+            e.cool = api.rand(SWING_GAP[0], SWING_GAP[1]);
           }
           continue;
         }
 
         if (Math.abs(dx) < reach && Math.abs(dz) < 0.12) {
-          if (e.cool <= 0) { e.wind = 0.42; api.beep(380, 60, 'triangle', 0.04); }
+          if (e.cool <= 0) { e.wind = WIND_UP; api.beep(380, 60, 'triangle', 0.04); }
         } else {
           e.x += Math.sign(dx) * e.speed * api.w * dt;
           e.z += Math.sign(dz) * Math.min(Math.abs(dz), dt * 0.5);

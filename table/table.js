@@ -383,8 +383,16 @@
         onProgress: text => { if (gen === gameGen) $('gameProgress').textContent = text; },
         onWin: () => { if (gen === gameGen) finishGame(true); },
         onLose: reason => { if (gen === gameGen) finishGame(false, reason); },
-      });
+      }, { difficulty: difficulty() });
     };
+  }
+
+  // Difficulty rides along with the room state, because the games run here in
+  // the browser and cannot read the server's config themselves. Falling back
+  // to 'normal' matters: a game must never be unplayable because a snapshot
+  // arrived a moment late.
+  function difficulty() {
+    return (state && state.difficulty) || 'normal';
   }
 
   function renderGameClock() {
@@ -544,7 +552,7 @@
           if (state && state.defuse && state.defuse.token === token) openDefuse(state.defuse);
         }, 500);
       },
-    });
+    }, { difficulty: difficulty() });
   }
 
   function closeDefuse() {

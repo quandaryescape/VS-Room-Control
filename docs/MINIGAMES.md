@@ -263,6 +263,66 @@ costs more than six wrong guesses.
 If you want Recall easier, raise `MAX_MISSES` to 7 before you reduce the number
 of pairs; the eight-pair board is what makes it feel like a real memory test.
 
+
+---
+
+## Difficulty
+
+`rules.difficulty` is `easy`, `normal` or `hard`, set from the operator
+Settings screen and applied without a restart. **`normal` is every game exactly
+as it was tuned**, so the setting changes nothing until someone picks a
+different level.
+
+The mini-games run in the browser and cannot read the server's config, so the
+value rides along in the room state snapshot and is handed to the game at
+mount. A game asks for it through one helper:
+
+```js
+const TARGET = api.tune(6, 8, 11);   // easy, normal, hard
+```
+
+Stating the whole curve on one line is the point — a game's difficulty is
+readable at a glance instead of scattered through branches. A game that has not
+been tuned simply never calls it and behaves the same at every level.
+
+| Game | Knob | easy · normal · hard |
+|---|---|---|
+| Flap Drone | gates to pass | 6 · 8 · 11 |
+| Sequence | rounds to win | 4 · 5 · 7 |
+| Corridor Run | seconds to survive | 22 · 30 · 42 |
+| Whack | hits to win / mistakes allowed | 9·12·16 / 4·3·2 |
+| Recall | wrong guesses allowed | 8 · 6 · 5 |
+| Cut The Line | deliveries / drops allowed | 2·3·4 / 7·5·3 |
+| Street Crew | see below | |
+
+Reroute is the exception: its boards are baked in and screened for difficulty
+when they are generated, so there is no single number to scale.
+
+### Street Crew's curve
+
+The brawler has the most to scale, and its constants sit together at the top of
+`brawl.js`:
+
+| | easy | normal | hard |
+|---|---|---|---|
+| Player health | 6 | 4 | 3 |
+| Starting credits | 3 | 2 | 1 |
+| Goon health | 2 | 2 | 3 |
+| Brute health | 6 | 8 | 11 |
+| Enemy wind-up | 0.52s | 0.38s | 0.28s |
+| Gap between swings | 0.9–1.6s | 0.6–1.2s | 0.4–0.85s |
+| Wave sizes | 2, 3, 1 | 3, 4, 1 | 4, 5, 2 |
+| Extra bodies per player | 0.8 | 1.1 | 1.4 |
+
+The **wind-up** is the one that matters most. It is the window in which
+stepping off the enemy's depth line saves you, so shortening it is what turns
+the fight from a stand-still-and-hold-HIT exercise into something that needs
+footwork. `normal` is deliberately harder than the game's first cut for exactly
+that reason.
+
+The brute wave scales more gently per player than the goon waves: brutes soak
+hits, so one extra brute adds far more time to a wave than one extra goon, and
+the round is on a clock.
 ---
 
 ## Adding a game

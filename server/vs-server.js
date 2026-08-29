@@ -342,6 +342,15 @@ const requestHandler = async (req, res) => {
         }
         if (body.rules.armedOnly !== undefined) r.armedOnly = !!body.rules.armedOnly;
 
+        if (body.rules.difficulty !== undefined) {
+          const d = String(body.rules.difficulty);
+          if (!['easy', 'normal', 'hard'].includes(d)) {
+            problems.push('difficulty must be easy, normal or hard');
+          } else {
+            r.difficulty = d;
+          }
+        }
+
         if (body.rules.minigames !== undefined) {
           const wanted = Array.isArray(body.rules.minigames) ? body.rules.minigames : [];
           const known = wanted.filter(id => minigames.get(id));

@@ -5,8 +5,8 @@ VSGames.register({
   howto: 'Tap every GREEN target. Never tap a RED one. Twelve hits wins; three mistakes loses.',
 
   mount(api) {
-    const TARGET_HITS = 12;
-    const MAX_MISTAKES = 3;
+    const TARGET_HITS = api.tune(9, 12, 16);
+    const MAX_MISTAKES = api.tune(4, 3, 2);
     const COLS = 4, ROWS = 3;
 
     let hits = 0;

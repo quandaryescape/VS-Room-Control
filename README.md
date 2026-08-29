@@ -418,6 +418,8 @@ changing between games:
 - **Mini-games in the pool** — which games the server may deal
 - **Rules** — cooldown, lockout, mini-game time limit, sabotage choice window,
   max sabotages per team, avoid-repeat count, and `armedOnly`
+- **Difficulty** — easy / normal / hard, scaling every game's win and lose
+  thresholds at once
 - **Sabotages** — enable/disable each one, rename it, and edit its numeric
   parameters (durations, multipliers)
 

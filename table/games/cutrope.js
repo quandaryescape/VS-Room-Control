@@ -28,8 +28,8 @@ VSGames.register({
   mount(api) {
     const { g } = api.makeCanvas();
 
-    const DELIVERIES_TO_WIN = 3;
-    const MAX_DROPS = 5;
+    const DELIVERIES_TO_WIN = api.tune(2, 3, 4);
+    const MAX_DROPS = api.tune(7, 5, 3);
     const GRAVITY = 1500;
 
     // Normalised to the canvas, so one set of numbers fits every table size.
