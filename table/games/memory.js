@@ -1,4 +1,4 @@
-/* Recall — find all eight pairs. Five wrong guesses and the round is lost. */
+/* Recall — find all eight pairs. Six wrong guesses and the round is lost. */
 VSGames.register({
   id: 'memory',
   name: 'Recall',

@@ -36,9 +36,9 @@ not modified.**
 1. The GM arms the VS round from the operator dashboard (or a puzzle in
    Quandary does it via a webhook).
 2. A team taps the one giant button on their table: **PLAY FOR A SABOTAGE**.
-3. They're dealt a random mini-game — flappy-bird clone, Simon, a three-lane
-   runner, a Flow-style linking puzzle, whack-a-mole, or a memory grid. 60–90
-   seconds.
+3. They're dealt a random mini-game — one of six, from threading a drone
+   through laser gates to linking pairs without crossing a line. 60–90
+   seconds. See [Mini-games](#mini-games) for the full set.
 4. Win, and they get a menu of sabotages to fire at the *other* room. Lose, and
    they wait 20 seconds and try again.
 5. The sabotage lands next door: lights die, lights strobe, an air horn goes
@@ -333,6 +333,41 @@ dashboard, which pings the lights, both Wall Player PCs, and Quandary.
 `wallplayer/` is your existing Wall Player with three endpoints added. See
 [wallplayer/CHANGES.md](wallplayer/CHANGES.md) for exactly what changed and how
 to drop it in.
+
+---
+
+## Mini-games
+
+Winning a sabotage means winning one of these first. The server deals a team a
+random game from the pool and won't hand out the same one again until two
+others have been played, so a team that keeps coming back gets variety rather
+than the game they've gotten good at.
+
+Every game is drawn procedurally — no image assets — so they scale from a
+27-inch table to a 55-inch 4K one and stay in the room's accent colour.
+
+| | Game | What you do | Win | Limit |
+|---|---|---|---|---|
+| 🚁 | **Flap Drone** | Tap anywhere to flap, gravity does the rest | Thread 8 laser gates without touching one | 90s |
+| 🔴 | **Sequence** | Watch four panels light in order, tap them back | Survive 5 rounds, each one longer | 90s |
+| 🏃 | **Corridor Run** | Tap the left or right half (or swipe) to change lane | Survive 30 seconds in the tunnel | 90s |
+| 🔀 | **Reroute** | Drag between matching dots to link every pair | Link all pairs, no path crossing another | 90s |
+| 🎯 | **Whack** | Tap green targets, never tap a red one | 12 hits — but 3 mistakes loses it | 60s |
+| 🧠 | **Recall** | Flip two cards at a time to find matching pairs | All 8 pairs within 6 wrong guesses | 90s |
+
+Lose, and the team waits 20 seconds before being dealt another. Win, and they
+pick a sabotage to fire next door, then go on a two-minute cooldown.
+
+**Speed Trap defusal.** When a team is hit with Speed Trap they get 30 seconds
+to win a game or their clock runs at double speed for three minutes. Only
+**Sequence** and **Whack** are offered there — they're the two that can
+genuinely be finished inside 30 seconds by someone under pressure. Reroute
+takes 30–60 seconds even for a player who has seen the board, so it's excluded
+no matter how good a puzzle it is.
+
+Which games are in the pool is `rules.minigames` in `config.json`; remove an id
+to retire it. Tuning and how to add your own is in
+[docs/MINIGAMES.md](docs/MINIGAMES.md).
 
 ---
 
