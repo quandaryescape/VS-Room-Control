@@ -36,7 +36,7 @@ not modified.**
 1. The GM arms the VS round from the operator dashboard (or a puzzle in
    Quandary does it via a webhook).
 2. A team taps the one giant button on their table: **PLAY FOR A SABOTAGE**.
-3. They're dealt a random mini-game — one of nine, from threading a drone
+3. They're dealt a random mini-game — one of ten, from threading a drone
    through laser gates to linking pairs without crossing a line. 60–90
    seconds. See [Mini-games](#mini-games) for the full set.
 4. Win, and they get a menu of sabotages to fire at the *other* room. Lose, and
@@ -326,7 +326,7 @@ dashboard, which pings the lights, both Wall Player PCs, and Quandary.
 | Folder | What it is | Runs on |
 |---|---|---|
 | `server/` | VS server: match state, sabotage routing, hardware adapters | one machine |
-| `table/` | the touchscreen UI and the nine mini-games | each table PC (browser) |
+| `table/` | the touchscreen UI and the ten mini-games | each table PC (browser) |
 | `operator/` | GM dashboard for the VS layer | any browser |
 | `wallplayer/` | **modified** Wall Player — adds a sabotage API | each projector PC |
 
@@ -357,6 +357,7 @@ Every game is drawn procedurally — no image assets — so they scale from a
 | ✂️ | **Cut The Line** | Swipe across a rope to sever it; gravity does the rest | Land the core in the collector 3 times — 5 drops loses | 90s |
 | 🥊 | **Street Crew** | **1–4 players.** Tap a pad along the bottom to drop in; stick moves, HIT punches | Clear 3 waves and the brute on shared credits | 90s |
 | 🪜 | **Scaffold** | **1–2 players.** Draw platforms under the auto-bouncing jumper; the angle you draw steers it | Reach the target altitude before the clock | 90s |
+| 🧱 | **Brick Buster** | **1–4 players.** Touch a slot along the bottom to drop in; slide to move your paddle | Clear all 30 bricks on shared credits | 90s |
 
 Lose, and the team waits 20 seconds before being dealt another. Win, and they
 pick a sabotage to fire next door, then go on a two-minute cooldown.

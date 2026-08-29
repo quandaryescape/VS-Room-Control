@@ -24,6 +24,7 @@ const CATALOG = [
   { id: 'cutrope',  name: 'Cut The Line', blurb: 'Swipe to cut. Drop the core in.',           timeLimit: 90, defuse: false },
   { id: 'brawl',    name: 'Street Crew',  blurb: '1-4 players. Clear the street.',            timeLimit: 120, defuse: false },
   { id: 'scaffold', name: 'Scaffold',     blurb: '1-2 players. Draw the way up.',             timeLimit: 90, defuse: false },
+  { id: 'bricks',   name: 'Brick Buster', blurb: '1-4 players. Clear every brick.',           timeLimit: 90, defuse: false },
 ];
 
 const BY_ID = new Map(CATALOG.map(g => [g.id, g]));

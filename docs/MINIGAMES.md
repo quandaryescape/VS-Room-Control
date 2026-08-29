@@ -1,6 +1,6 @@
 # Mini-games
 
-Nine games. The server deals one at random when a team taps **PLAY FOR A
+Ten games. The server deals one at random when a team taps **PLAY FOR A
 SABOTAGE**, avoiding whatever they were given in the last couple of rounds.
 
 | id | Name | Win condition | Lose condition | Defuse? |
@@ -14,6 +14,7 @@ SABOTAGE**, avoiding whatever they were given in the last couple of rounds.
 | `cutrope` | Cut The Line | 3 cores delivered | 5 drops | — |
 | `brawl` | Street Crew | 3 waves cleared | Shared credits exhausted | — |
 | `scaffold` | Scaffold | Reach the target altitude | Clock only | — |
+| `bricks` | Brick Buster | Clear all 30 bricks | Shared credits exhausted | — |
 
 "Defuse?" marks the games eligible for the Speed Trap's defuse challenge, where
 a team has 30 seconds and is panicking. That is a tighter bar than it looks, so
@@ -34,11 +35,80 @@ If you add a game and want it in the defuse pool, time its floor first.
 Change the pool in `config.json`:
 
 ```json
-"rules": { "minigames": ["flappy", "simon", "runner", "flow", "reaction", "memory"] }
+"rules": {
+  "minigames": ["flappy", "simon", "runner", "flow", "reaction",
+                "memory", "cutrope", "brawl", "scaffold", "bricks"]
+}
 ```
 
 Remove an id to retire a game. Set `minigameTimeLimitSeconds` for the overall
 round clock (default 90).
+
+---
+
+## Brick Buster, and how it scales to four players
+
+Breakout, with up to four people around one table. Touch a slot along the
+bottom to drop in mid-round; slide to move your paddle. Clear the wall on
+shared credits.
+
+### The floor is divided, not sealed
+
+The floor is split between the players who have **actually joined**, and each
+paddle is sized to a fixed share of its own slice. Solo, one player owns the
+whole width and gets one very wide paddle; four players own a quarter each and
+get quarter-width paddles. Total coverage — and therefore the difficulty — is
+the same at every player count. What changes is how far each person reaches.
+
+The first cut sealed the floor under *unjoined* zones instead, so a solo player
+defended a quarter and the rest bounced. It measured terribly: **a solo player
+who never moved their paddle at all still cleared 33 of 44 bricks in 25
+seconds**, because a ball trapped between three walls demolishes the wall by
+itself. Skill has to matter, so the floor is always fully open.
+
+### Bricks do not scale with the player count
+
+Deliberately, and unlike Street Crew's enemies. Joining a beat-'em-up mid-wave
+adds a fighter to a fight; joining breakout and watching thirty new bricks
+appear reads as a punishment for helping. More hands just clear the same wall
+faster. What a joining player *does* bring is a credit, arcade-style.
+
+### Three bugs worth knowing about, because they were all invisible
+
+Each of these looked fine on screen and only showed up under measurement:
+
+- **The wall was positioned once at mount.** Every other measurement (paddle,
+  floor, ball radius) is recomputed per frame from the canvas size, so if the
+  wall was built before layout settled — or the table were ever resized — the
+  bricks stayed at stale coordinates while the ball played by the new ones.
+  Symptom: a full 90-second round in which the ball never touched a brick.
+  Brick geometry is now derived, like everything else.
+- **A perfectly vertical ball never hits anything.** Return the ball dead
+  centre and it goes straight up, comes straight back down the same column, and
+  once that column is empty it bounces between floor and ceiling forever. A
+  tracked solo game cleared 7 bricks in 90 seconds. The paddle bounce now
+  clamps the angle away from vertical as well as away from flat.
+- **The last brick is a lottery.** A two-player game ran the clock out with
+  exactly one brick standing. With three or fewer left the paddle now aims for
+  you — and the vertical clamp is lifted while aiming, because a last brick
+  straight overhead wants exactly that shot.
+
+### Measured round times
+
+Bot-played, paddles tracking the ball, `normal` difficulty, 30 bricks:
+
+| Players | Result |
+|---|---|
+| 1 | won in 25–52s |
+| 2 | won in 50–51s |
+| 3 | won in 50s |
+| 4 | won in 35–56s |
+| 1, paddle never moved | **lost** at 17–21s |
+
+Comfortably inside the 90-second round, and the no-skill case loses — which is
+the pair of properties that matter. Note a perfect bot never drops a ball, so
+these times measure *clear speed*, not how hard it is to survive; `hard` clears
+faster than `normal` for a bot precisely because the ball is quicker.
 
 ---
 
