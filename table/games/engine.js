@@ -56,7 +56,10 @@
 
     host.innerHTML = '';
     const layer = document.createElement('div');
-    layer.style.cssText = 'position:absolute;inset:0;overflow:hidden;';
+    // touch-action:none rather than the page's `manipulation`: with four
+    // fingers on one table a second touch otherwise becomes a browser gesture
+    // instead of a second player.
+    layer.style.cssText = 'position:absolute;inset:0;overflow:hidden;touch-action:none;';
     host.appendChild(layer);
 
     let finished = false;
@@ -128,6 +131,27 @@
         const end = ev => { if (!active) return; active = false; handlers.end && handlers.end(pointFrom(ev), ev); };
         on(layer, 'pointerup', end);
         on(layer, 'pointercancel', end);
+      },
+
+      // Every finger, keyed by pointerId. onTap and onDrag deliberately
+      // collapse input to a single pointer, which is right for the solo games
+      // and useless for a game where four people share one screen.
+      onPointers(handlers) {
+        on(layer, 'pointerdown', ev => {
+          ev.preventDefault();
+          if (layer.setPointerCapture) {
+            try { layer.setPointerCapture(ev.pointerId); } catch (e) {}
+          }
+          handlers.down && handlers.down(ev.pointerId, pointFrom(ev), ev);
+        });
+        on(layer, 'pointermove', ev => {
+          handlers.move && handlers.move(ev.pointerId, pointFrom(ev), ev);
+        });
+        // Both up and cancel have to release the slot. A pointercancel that is
+        // treated as "still held" leaves a player walking into a wall forever.
+        const release = ev => { handlers.up && handlers.up(ev.pointerId, pointFrom(ev), ev); };
+        on(layer, 'pointerup', release);
+        on(layer, 'pointercancel', release);
       },
 
       // Tap-left / tap-right / swipe, which is how the lane games are steered.

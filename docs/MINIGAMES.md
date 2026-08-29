@@ -1,6 +1,6 @@
 # Mini-games
 
-Seven games. The server deals one at random when a team taps **PLAY FOR A
+Eight games. The server deals one at random when a team taps **PLAY FOR A
 SABOTAGE**, avoiding whatever they were given in the last couple of rounds.
 
 | id | Name | Win condition | Lose condition | Defuse? |
@@ -12,6 +12,7 @@ SABOTAGE**, avoiding whatever they were given in the last couple of rounds.
 | `reaction` | Whack | 12 green targets | 3 red targets | ✓ |
 | `memory` | Recall | 8 pairs | 6 wrong guesses | — |
 | `cutrope` | Cut The Line | 3 cores delivered | 5 drops | — |
+| `brawl` | Street Crew | 3 waves cleared | Shared credits exhausted | — |
 
 "Defuse?" marks the games eligible for the Speed Trap's defuse challenge, where
 a team has 30 seconds and is panicking. That is a tighter bar than it looks, so
@@ -164,6 +165,75 @@ Cut The Line asks for three separate deliveries, each needing a swing to build
 before the cut is worth making, so it is `defuse: false`. If you want a
 shorter variant for defusal, drop `DELIVERIES_TO_WIN` to 1 and time the floor
 before changing the flag — see the table at the top of this file.
+
+---
+
+## Street Crew, the 1–4 player one
+
+A side-scrolling beat-'em-up in the arcade-cabinet tradition. Up to four
+players share the one table: each puts a finger on a free control island along
+the bottom edge and is in. Clear three waves — two of goons, then a brute with
+an escort — and the round is won.
+
+### Drop-in, not a lobby
+
+There is no ready-up screen. A team standing around a table does not all press
+"ready" at the same moment, and waiting for them burns clock the round does not
+have. Touching a free island joins you, mid-wave, at whatever point you arrive.
+Nobody is ever removed, so a player who lets go still has a fighter standing.
+
+### Shared credits, because a solo player exists
+
+Each fighter has five health pips. Going down costs the **crew** one credit and
+the fighter gets back up four seconds later; running out of credits ends the
+round.
+
+The obvious rule — "you are dead when your pips are gone" — reads fine with
+four players and is brutal with one. A solo player would lose the instant their
+last pip went, which makes the revive timer decorative and the game a single
+five-mistake gauntlet. Credits start at 2 and **a joining player brings one
+with them**, which is the coin slot: one player fights on 3, four on 6.
+
+### Everything scales with the crew
+
+Wave sizes are computed from the number of players who have actually joined,
+and `rescaleWave()` tops a wave up when someone drops in mid-fight. One player
+facing a four-player wave is not a challenge, it is a loss, and a team watching
+one person lose learns nothing about the room. Reinforcements are always goons
+even on the brute wave — a second brute arriving because a friend joined late
+is a punishment, not a rebalance.
+
+### Input: the one game that needs every finger
+
+`onTap` and `onDrag` deliberately collapse to a single pointer, which is right
+for the solo games and useless here. This game uses `api.onPointers`, added to
+the engine for it, which reports every pointer keyed by `pointerId`. The game
+layer also sets `touch-action: none` — under the page's `manipulation` a second
+finger can become a browser gesture instead of a second player.
+
+Islands are at **fixed positions** rather than "wherever you touch". Four people
+reaching across one table need to know where their own controls are without
+looking down, and an anchor-where-you-touch stick means two players fighting
+over the same patch of glass.
+
+Each island is a floating stick on the left and a HIT pad on the right. Holding
+HIT keeps swinging at the cooldown rate, because that is what people do anyway.
+
+### Reading a fight
+
+Depth matters: a punch only connects if attacker and target are on roughly the
+same line (`|Δz| < 0.14`), so stepping up or down the road is a real dodge.
+Enemies telegraph with a 0.42s wind-up — the arm pulls back — and the blow only
+lands if you are still in the line when it finishes. Cast is drawn sorted by
+depth, so a fighter at the back never paints over one in front.
+
+### The clock
+
+The catalog gives this game `timeLimit: 120`, but that only applies if
+`rules.minigameTimeLimitSeconds` is unset — the global override wins, and it
+ships at 90. Three waves are tuned to be winnable inside 90 seconds by a crew
+that keeps moving. If you want the fuller arcade pacing, either raise
+`minigameTimeLimitSeconds` or clear it so per-game limits apply.
 
 ---
 
