@@ -186,8 +186,18 @@ each camera and a three-way lock: *Both teams* (the default), *Own team only*
 (the other room is locked out), and *GM only*. Locking out someone mid-move
 stops the camera at once. The lock resets to `ptz.lock` from `config.json` when
 the server restarts. Steering from the dashboard needs the operator PIN, if
-one is set. The dashboard has no video of its own, so steer while watching the
-room CCTV or the table.
+one is set.
+
+**GM view.** Each camera card has a **Show camera** button that puts that
+camera's picture on the dashboard, so you can see what you're aiming at. It is
+about 8 frames a second — enough to steer by, not broadcast quality. A camera
+only streams while some dashboard has it switched on, and each browser
+remembers which views it had open. The view uses the same frame relay as the
+Wall Takeover, so the two can run at once.
+
+The card also shows which physical camera the table opened, and whether the
+*other* table is receiving it (live / connecting… / no signal) — the quickest
+way to tell a network problem from a camera problem.
 
 ```json
 "camera": {
@@ -211,10 +221,10 @@ arrows move the picture the wrong way — a camera mounted upside down, say.
 - In the OBSBOT WebCam app, turn off **AI tracking** and **gesture control**
   before the camera goes into the room. Tracking fights manual steering, and
   with gestures on a player's wave can re-enable tracking or change the zoom.
-- Chrome needs permission to *move* the camera as well as to see through it.
-  `Start-Table.bat` and `start-table.sh` pass `--use-fake-ui-for-media-stream`,
-  which grants both without a prompt. In an ordinary browser window you get a
-  separate "use and move your camera" prompt.
+- Chrome needs permission to *move* the camera as well as to see through it,
+  and asks for it once per table: **"Use and move your camera"**. Tap
+  **Allow** the first time the table comes up. See "Steering doesn't work"
+  below.
 - If the table PC also has a built-in webcam, make sure the OBSBOT is the one
   opened: add `?cam=OBSBOT` to the table URL.
 
@@ -222,6 +232,35 @@ arrows move the picture the wrong way — a camera mounted upside down, say.
 chips as the table reports them. Greyed-out chips mean Chrome either sees a
 camera without those controls or was not granted permission to move it. The
 table's browser console also logs a `[ptz]` line when the camera opens.
+
+#### Steering doesn't work
+
+When a camera can't be steered, its card on the dashboard says why. The usual
+reason is **"Chrome on this table has not been allowed to move the camera"**:
+the table was given the picture but not the motor. Chrome keeps these as two
+separate permissions. Earlier launchers passed `--use-fake-ui-for-media-stream`,
+which auto-accepts only the picture — with it, steering can never work. The
+launchers no longer pass it, so:
+
+1. Update the launcher on the table PC (`git pull`, or copy `start-table.sh` /
+   `Start-Table.bat` over again) and restart the table.
+2. Chrome asks **"Use and move your camera"** — tap **Allow**. The answer is
+   kept in the kiosk's own profile, so this is once per table, not per boot.
+3. If no prompt shows on the touchscreen, run the launcher windowed
+   (`./start-table.sh --windowed` or `Start-Table.bat --windowed`), click
+   **Allow**, close it, and start the kiosk as normal.
+
+Until someone taps Allow the table can't open its camera, but it still shows
+the other room after a few seconds; the link rebuilds itself once the camera
+turns up.
+
+If Chrome forgets the answer between launches, serve the tables over HTTPS
+(see the README) — Chrome is most dependable about remembering permissions
+for a genuinely secure origin.
+
+If permission is granted and the card still says Chrome sees no pan/tilt/zoom,
+open `chrome://media-internals` on the table (windowed), go to **Video
+Capture**, and check the **Pan-Tilt-Zoom** column for the OBSBOT.
 
 ---
 

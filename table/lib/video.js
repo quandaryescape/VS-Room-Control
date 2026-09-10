@@ -13,6 +13,12 @@
   'use strict';
 
   const PC_CONFIG = { iceServers: [] };
+  // A link that hasn't come up in this long asks the server to start the
+  // handshake over, rather than sitting on CONNECTING for the rest of the game.
+  const CONNECT_TIMEOUT_MS = 12000;
+  // How long signalling waits for this table's camera before carrying on
+  // without it (see init).
+  const CAMERA_WAIT_MS = 8000;
 
   let socket = null;
   let roomKey = null;
@@ -24,7 +30,37 @@
   let pc = null;
   let peerKey = null;
   let isInitiator = false;
-  let pendingCandidates = [];
+  let session = null;          // id of the offer/answer exchange in progress
+  let pendingCandidates = [];  // { session, candidate } that arrived early
+  let status = 'offline';
+  let watchdog = null;
+
+  // Every signalling step runs on this chain, one at a time and in arrival
+  // order, and nothing runs until the camera has opened (or failed to).
+  //  - An answer built before the camera is ready carries no video, so the
+  //    other room would connect and see nothing.
+  //  - Handled concurrently, a fresh offer could wipe ICE candidates that had
+  //    already arrived for it.
+  let chain = Promise.resolve();
+  function queue(step) {
+    chain = chain.then(step).catch(err => console.warn('[video] signalling step failed', err));
+  }
+
+  function setStatus(next) {
+    status = next;
+    onState(next);
+    // The operator dashboard shows each table's link, which is the quickest
+    // way to tell a network problem from a camera problem.
+    if (socket && socket.connected) socket.emit('rtc:state', { status: next });
+    clearTimeout(watchdog);
+    if (next === 'connecting') {
+      watchdog = setTimeout(() => {
+        if (status === 'live' || !socket || !socket.connected) return;
+        console.warn('[video] still not connected after ' + CONNECT_TIMEOUT_MS / 1000 + 's, asking to start over');
+        socket.emit('rtc:retry');
+      }, CONNECT_TIMEOUT_MS);
+    }
+  }
 
   async function openCamera(labelHint) {
     if (localStream) return localStream;
@@ -61,126 +97,176 @@
     return localStream;
   }
 
-  function teardown() {
+  // Close the connection without forgetting candidates that have already
+  // arrived for the next one.
+  function closePeer() {
     if (pc) {
-      try { pc.close(); } catch (e) {}
+      const old = pc;
       pc = null;
+      try { old.close(); } catch (e) {}
     }
-    pendingCandidates = [];
     if (remoteEl) remoteEl.srcObject = null;
-    onState('offline');
+  }
+
+  function teardown() {
+    closePeer();
+    pendingCandidates = [];
+    setStatus('offline');
   }
 
   function createPeer() {
-    teardown();
-    pc = new RTCPeerConnection(PC_CONFIG);
+    closePeer();
+    const peer = new RTCPeerConnection(PC_CONFIG);
+    const id = session;
+    pc = peer;
 
     if (localStream) {
-      for (const track of localStream.getTracks()) pc.addTrack(track, localStream);
+      for (const track of localStream.getTracks()) peer.addTrack(track, localStream);
     }
 
-    pc.ontrack = ev => {
-      if (remoteEl && ev.streams[0]) {
+    peer.ontrack = ev => {
+      if (peer === pc && remoteEl && ev.streams[0]) {
         remoteEl.srcObject = ev.streams[0];
         remoteEl.play().catch(() => {});
       }
     };
 
-    pc.onicecandidate = ev => {
-      if (ev.candidate && peerKey) {
-        socket.emit('rtc:signal', { to: peerKey, data: { candidate: ev.candidate } });
+    peer.onicecandidate = ev => {
+      if (ev.candidate && peerKey && peer === pc) {
+        socket.emit('rtc:signal', { to: peerKey, data: { candidate: ev.candidate, session: id } });
       }
     };
 
-    pc.onconnectionstatechange = () => {
-      const state = pc.connectionState;
-      if (state === 'connected') onState('live');
+    peer.onconnectionstatechange = () => {
+      if (peer !== pc) return;          // an old connection winding down
+      const state = peer.connectionState;
+      if (state === 'connected') setStatus('live');
       else if (state === 'failed' || state === 'disconnected') {
-        onState('offline');
+        setStatus('offline');
         // A dropped LAN link usually comes back; rebuild rather than sit dead.
-        if (isInitiator) setTimeout(() => { if (peerKey) offer(); }, 2000);
+        if (isInitiator) {
+          setTimeout(() => {
+            if (peer === pc && peer.connectionState !== 'connected' && peerKey) queue(offer);
+          }, 2000);
+        }
       }
     };
 
-    return pc;
+    return peer;
   }
 
   async function offer() {
     if (!peerKey) return;
+    session = Math.random().toString(36).slice(2);
     createPeer();
     const desc = await pc.createOffer({ offerToReceiveVideo: true });
     await pc.setLocalDescription(desc);
-    socket.emit('rtc:signal', { to: peerKey, data: { sdp: pc.localDescription } });
-    onState('connecting');
+    socket.emit('rtc:signal', { to: peerKey, data: { sdp: pc.localDescription, session } });
+    setStatus('connecting');
+  }
+
+  // Candidates that turned up before the description they belong to.
+  async function drainCandidates() {
+    const mine = pendingCandidates.filter(c => c.session === session);
+    pendingCandidates = [];
+    for (const c of mine) await pc.addIceCandidate(c.candidate).catch(() => {});
   }
 
   async function handleSignal(from, data) {
-    peerKey = from;
+    if (!data) return;
 
-    if (data.sdp) {
-      if (data.sdp.type === 'offer') {
-        // The non-initiator always (re)builds on an incoming offer, which also
-        // recovers cleanly when the other table reloads mid-game.
-        createPeer();
-        await pc.setRemoteDescription(data.sdp);
-        for (const c of pendingCandidates.splice(0)) {
-          await pc.addIceCandidate(c).catch(() => {});
-        }
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        socket.emit('rtc:signal', { to: from, data: { sdp: pc.localDescription } });
-        onState('connecting');
-      } else if (data.sdp.type === 'answer' && pc) {
-        await pc.setRemoteDescription(data.sdp).catch(() => {});
-        for (const c of pendingCandidates.splice(0)) {
-          await pc.addIceCandidate(c).catch(() => {});
-        }
-      }
+    if (data.sdp && data.sdp.type === 'offer') {
+      // The non-initiator always (re)builds on an incoming offer, which also
+      // recovers cleanly when the other table reloads mid-game.
+      peerKey = from;
+      isInitiator = false;
+      session = data.session;
+      createPeer();
+      await pc.setRemoteDescription(data.sdp);
+      await drainCandidates();
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      socket.emit('rtc:signal', { to: from, data: { sdp: pc.localDescription, session } });
+      setStatus('connecting');
+      return;
+    }
+
+    if (data.sdp && data.sdp.type === 'answer') {
+      // An answer to an offer this table has since replaced would pair the
+      // new connection with the old one's credentials — drop it.
+      if (!pc || data.session !== session || pc.signalingState !== 'have-local-offer') return;
+      await pc.setRemoteDescription(data.sdp);
+      await drainCandidates();
       return;
     }
 
     if (data.candidate) {
-      if (pc && pc.remoteDescription && pc.remoteDescription.type) {
+      if (pc && data.session === session && pc.remoteDescription && pc.remoteDescription.type) {
         await pc.addIceCandidate(data.candidate).catch(() => {});
       } else {
-        pendingCandidates.push(data.candidate);
+        pendingCandidates.push({ session: data.session, candidate: data.candidate });
+        if (pendingCandidates.length > 100) pendingCandidates.shift();
       }
     }
   }
 
   window.VSVideo = {
-    async init(opts) {
+    // Resolves once the camera has opened, or failed to.
+    init(opts) {
       socket = opts.socket;
       roomKey = opts.roomKey;
       localEl = opts.localEl;
       remoteEl = opts.remoteEl;
       onState = opts.onState || (() => {});
 
-      try {
-        await openCamera(opts.cameraLabel);
-      } catch (e) {
-        onState('nocamera', e.message);
-      }
+      const opened = openCamera(opts.cameraLabel).catch(e => { onState('nocamera', e.message); });
 
-      socket.on('rtc:initiate', ({ peer }) => {
+      // Signalling waits for the camera, but not forever. A fresh kiosk
+      // profile shows Chrome's "use and move your camera" prompt, and a table
+      // nobody has tapped Allow on yet should still show the other room. If
+      // the camera turns up after that, rebuild the link so it carries this
+      // table's picture too.
+      let gaveUp = false;
+      chain = Promise.race([
+        opened,
+        new Promise(resolve => setTimeout(() => { gaveUp = true; resolve(); }, CAMERA_WAIT_MS)),
+      ]);
+      opened.then(stream => {
+        if (!gaveUp || !stream) return;
+        console.info('[video] camera arrived late — rebuilding the link to include it');
+        queue(() => {
+          if (isInitiator && peerKey) return offer();
+          if (socket.connected) socket.emit('rtc:retry');
+        });
+      });
+
+      // Handlers go on NOW, before the camera has finished opening. The
+      // server tells a table its role the moment it says hello — while the
+      // camera is still starting — and a message that arrives before its
+      // handler exists is silently dropped. That used to leave one table on
+      // NO SIGNAL and the other stuck on CONNECTING. The chain above holds
+      // the messages until the camera is ready instead.
+      socket.on('rtc:initiate', ({ peer }) => queue(() => {
         peerKey = peer;
         isInitiator = true;
-        offer().catch(err => onState('offline', err.message));
-      });
+        return offer();
+      }));
 
-      socket.on('rtc:standby', ({ peer }) => {
+      socket.on('rtc:standby', ({ peer }) => queue(() => {
         peerKey = peer;
         isInitiator = false;
-        onState('connecting');
-      });
+        if (status !== 'live') setStatus('connecting');
+      }));
 
-      socket.on('rtc:signal', ({ from, data }) => {
-        handleSignal(from, data).catch(err => console.warn('rtc signal failed', err));
-      });
+      socket.on('rtc:signal', ({ from, data } = {}) => queue(() => handleSignal(from, data)));
 
-      socket.on('rtc:peer-gone', ({ peer }) => {
+      socket.on('rtc:peer-gone', ({ peer }) => queue(() => {
         if (peer === peerKey) { peerKey = null; teardown(); }
-      });
+      }));
+
+      socket.on('connect', () => socket.emit('rtc:state', { status }));
+
+      return opened;
     },
 
     hasCamera() { return !!localStream; },

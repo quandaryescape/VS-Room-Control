@@ -103,10 +103,10 @@
   function startCamPush(opts) {
     stopCamPush();
     const video = $('localVideo');
-    if (!video || !video.srcObject) {
-      console.warn('[cam] takeover asked for frames but this table has no camera');
-      return;
-    }
+    // No early return when the camera isn't open yet: a table that has just
+    // (re)loaded is asked for frames before its camera is up, and grab()
+    // already skips until the video has a size.
+    if (!video) return;
 
     const fps = Math.max(2, Math.min(opts.fps || 12, 25));
     const quality = opts.quality || 0.6;
@@ -115,7 +115,8 @@
     const g = canvas.getContext('2d');
     let inFlight = false;
 
-    $('onAir').hidden = false;
+    // Frames also go to the GM's dashboard; only a takeover is "on their walls".
+    $('onAir').hidden = !opts.onAir;
 
     const grab = () => {
       // Skip rather than queue: on a slow link it is better to drop frames

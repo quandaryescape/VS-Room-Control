@@ -34,7 +34,9 @@ installed but a browser.
   signalling. Video never touches the server, so there is nothing to transcode
   and no added latency. No STUN or TURN is configured on purpose — both tables
   are on the same LAN, so host candidates connect directly and the feed keeps
-  working with the internet unplugged.
+  working with the internet unplugged. Each table reports its link state to
+  the server (shown on the dashboard), and a link that hasn't come up within
+  12 seconds asks the server to restart the handshake.
 - **Table → projectors (Wall Takeover)**: a second, separate video path. mpv
   cannot receive WebRTC, so during a takeover the table *also* grabs JPEG frames
   off its own camera and POSTs them to the VS server, which republishes them as
@@ -42,6 +44,8 @@ installed but a browser.
   camera looks redundant, but it is what keeps the projector PCs completely
   unchanged — no second browser window fighting mpv for the screen, and no
   z-order to manage on a machine that has to be reliable for three hours a day.
+  The same relay feeds the GM's camera view on the operator dashboard (as an
+  MJPEG `<img>`); the table pushes frames while either one wants them.
 - **Camera steering (pan/tilt/zoom)**: Socket.IO, through the VS server. Only
   the table a camera is plugged into can move it, but the team next door and
   the GM steer it too — so every steering input, the owning team's included,

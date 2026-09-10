@@ -23,6 +23,7 @@ class Engine {
     this.match = { armed: false, startedAt: null, endedAt: null };
     this.emit = () => {};        // set by vs-server: (roomKey|null, event, payload)
     this.history = [];
+    this.camUsers = {};          // roomKey -> Map(reason -> push options); see camWant()
 
     for (const [key, cfg] of Object.entries(config.rooms)) {
       this.rooms[key] = {
@@ -250,8 +251,11 @@ class Engine {
       }
       r.lights.restore();
       r.wall.restore();
-      this.emit(r.key, 'cam:stop', {});
-      if (this.camRelay) this.camRelay.close(r.key);
+      // Belt and braces: the takeover's own cancel above already lets go of
+      // the camera. Only the takeover's share is released — the GM's camera
+      // view is not an effect on the players, and ALL STOP (or the end of a
+      // match) is exactly when the GM most wants to see the rooms.
+      this.camRelease(r.key, 'takeover');
       this.quandary.stopSpeedUp(r.key);
     }
     if (!opts.silent) {
@@ -483,8 +487,7 @@ class Engine {
       finished = true;
       clearInterval(poll);
       clearTimeout(endTimer);
-      this.emit(sourceKey, 'cam:stop', {});
-      if (this.camRelay) this.camRelay.close(sourceKey);
+      this.camRelease(sourceKey, 'takeover');
       victim.wall.restore();
     };
 
@@ -497,9 +500,10 @@ class Engine {
       return { seconds, cancel() {} };
     }
 
-    // Open the feed before asking for frames, or the first ones are refused.
-    this.camRelay.open(sourceKey);
-    this.emit(sourceKey, 'cam:push', { fps: 12, width: 960, quality: 0.6 });
+    // camWant opens the feed before asking for frames, or the first ones are
+    // refused. If the GM is already watching this camera the feed is live and
+    // the walls switch over at once.
+    this.camWant(sourceKey, 'takeover', { fps: 12, width: 960, quality: 0.6 });
     log.info(`Camera takeover: ${source.name} -> ${victim.name} walls`, { seconds });
 
     const startedAt = Date.now();
@@ -518,13 +522,48 @@ class Engine {
       if (Date.now() - startedAt > 3000) {
         clearInterval(poll);
         log.warn(`No camera frames from room ${sourceKey} — falling back`);
-        this.emit(sourceKey, 'cam:stop', {});
-        this.camRelay.close(sourceKey);
+        this.camRelease(sourceKey, 'takeover');
         fallback();
       }
     }, 150);
 
     return { seconds, cancel: stop };
+  }
+
+  // A room's camera can be wanted by more than one thing at once: a Wall
+  // Takeover on the other room's projectors, and the GM watching it from the
+  // dashboard. The table pushes frames while anything wants them, at the best
+  // quality any of them asked for, and the relay closes only when the last
+  // one lets go — so the GM hiding a preview can't black out a takeover
+  // mid-sabotage, and a takeover ending can't kill the GM's view.
+  camWant(roomKey, reason, opts) {
+    if (!this.camRelay || !this.room(roomKey)) return;
+    const users = this.camUsers[roomKey] || (this.camUsers[roomKey] = new Map());
+    if (!users.size) this.camRelay.open(roomKey);
+    users.set(reason, opts);
+    this.emit(roomKey, 'cam:push', this.camPushOpts(roomKey));
+  }
+
+  camRelease(roomKey, reason) {
+    const users = this.camUsers[roomKey];
+    if (!users || !users.delete(reason)) return;
+    if (users.size) {
+      this.emit(roomKey, 'cam:push', this.camPushOpts(roomKey));
+      return;
+    }
+    this.emit(roomKey, 'cam:stop', {});
+    if (this.camRelay) this.camRelay.close(roomKey);
+  }
+
+  camPushOpts(roomKey) {
+    const users = this.camUsers[roomKey] || new Map();
+    const out = { fps: 0, width: 0, quality: 0 };
+    for (const opts of users.values()) {
+      for (const key of Object.keys(out)) out[key] = Math.max(out[key], opts[key] || 0);
+    }
+    // The table's "ON THEIR WALLS" badge is for takeovers only, not the GM.
+    out.onAir = users.has('takeover');
+    return out;
   }
 
   // ---------- speed trap ----------
@@ -645,6 +684,10 @@ class Engine {
     if (!r) return;
     r.tableConnected = connected;
     log.info(`Room ${roomKey} table ${connected ? 'connected' : 'disconnected'}`);
+    // A table that reloads mid-stream comes back not knowing it was pushing
+    // frames; ask again so a takeover or the GM's view picks straight back up.
+    const users = this.camUsers[roomKey];
+    if (connected && users && users.size) this.emit(roomKey, 'cam:push', this.camPushOpts(roomKey));
     this.pushRoom(roomKey);
   }
 

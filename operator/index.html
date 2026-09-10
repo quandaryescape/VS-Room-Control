@@ -116,6 +116,21 @@
   .pad .r { grid-area: 2 / 3; } .pad .d { grid-area: 3 / 2; }
   .pad .zi { grid-area: 1 / 5; } .pad .zo { grid-area: 3 / 5; }
   .pad.dead { opacity: .35; pointer-events: none; }
+  [hidden] { display: none !important; }
+  .cam .view {
+    flex: 1 1 100%; position: relative; aspect-ratio: 16 / 9; background: #000;
+    border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
+  }
+  .cam .view img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+  .cam .view .nopic {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font: 12px var(--mono); color: var(--dim);
+  }
+  .cam .why {
+    font: 12px/1.5 var(--sans); color: var(--lamp); background: #1f1a0e;
+    border: 1px solid #4a3a14; border-radius: 6px; padding: 7px 10px;
+  }
+  .cam .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 
   h3 { font: 600 12px var(--mono); letter-spacing: .2em; text-transform: uppercase; color: var(--dim); margin: 0 0 10px; }
   .log {

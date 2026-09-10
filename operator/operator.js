@@ -182,13 +182,63 @@
 
   function camEmit(event, payload, onOk) {
     socket.emit(event, payload, result => {
-      if (result && result.ok) { if (onOk) onOk(); return; }
+      if (result && result.ok) { if (onOk) onOk(result); return; }
       // Held buttons repeat several times a second; one toast is enough.
       if (Date.now() - camDeniedAt > 2500) {
         camDeniedAt = Date.now();
         toast((result && result.error) || 'camera command failed', true);
       }
     });
+  }
+
+  const LINK_TEXT = { live: 'live', connecting: 'connecting…', offline: 'no signal' };
+
+  // Plain-English reason a camera has no steering, from the table's own
+  // diagnosis (see diagnose() in table/lib/camctl.js).
+  function ptzWhy(cam) {
+    const d = cam.diag || {};
+    if (!d.label) return 'The table has no camera open.';
+    if (!d.browserPtz) return 'This table\'s browser can\'t move cameras — use Chrome or Edge.';
+    if (d.ptzPermission && d.ptzPermission !== 'granted') {
+      return 'Chrome on this table has not been allowed to move the camera (permission: '
+        + d.ptzPermission + '). See "Steering doesn\'t work" in docs/HARDWARE.md.';
+    }
+    return 'Chrome sees no pan/tilt/zoom on "' + d.label + '". Check that this is the OBSBOT, '
+      + 'and look at chrome://media-internals → Video Capture → Pan-Tilt-Zoom on the table.';
+  }
+
+  // Which cameras this dashboard is showing. Remembered in this browser, and
+  // asked for again after every reconnect, because the server forgets a
+  // dashboard's views when its connection drops.
+  const viewing = new Set((() => {
+    try { return JSON.parse(localStorage.getItem('vsCamView') || '[]'); } catch (e) { return []; }
+  })());
+  let viewSyncPending = true;
+
+  function saveViewing() {
+    try { localStorage.setItem('vsCamView', JSON.stringify([...viewing])); } catch (e) {}
+  }
+
+  function setView(room, on) {
+    camEmit('cam:view', { room, on }, result => {
+      if (on) viewing.add(room); else viewing.delete(room);
+      saveViewing();
+      const card = document.querySelector('[data-cam="' + CSS.escape(room) + '"]');
+      if (card) showView(card, on ? result.stream : null);
+    });
+  }
+
+  function showView(card, stream) {
+    const view = card.querySelector('.view');
+    const img = view.querySelector('img');
+    if (stream) {
+      img.src = stream + '?t=' + Date.now();   // a fresh URL, so a reconnect gets a fresh stream
+      view.hidden = false;
+    } else {
+      img.removeAttribute('src');              // drops the connection, which stops the stream
+      view.hidden = true;
+    }
+    card.querySelector('.watch').textContent = stream ? 'Hide camera' : 'Show camera';
   }
 
   function holderText(cam) {
@@ -201,10 +251,14 @@
   function camCard(key) {
     return `
     <div class="cam" data-cam="${esc(key)}">
+      <div class="view" hidden><span class="nopic">waiting for the picture…</span><img alt=""></div>
       <div class="info">
-        <div class="title"></div>
+        <div class="row"><span class="title"></span><button class="sm ghost watch">Show camera</button></div>
+        <div class="label muted"></div>
         <div class="caps"></div>
         <div class="who"></div>
+        <div class="link muted"></div>
+        <div class="why" hidden></div>
         <div class="locks">${LOCKS.map(([id, label]) =>
           `<button class="sm" data-lock="${id}">${label}</button>`).join('')}</div>
       </div>
@@ -239,6 +293,7 @@
             camEmit('cam:lock', { room, lock: button.dataset.lock },
               () => toast(cams[room].name + ' camera: ' + button.textContent)));
         }
+        card.querySelector('.watch').addEventListener('click', () => setView(room, !viewing.has(room)));
       }
     }
 
@@ -252,6 +307,19 @@
           ? '<span class="cap">TABLE OFFLINE</span>'
           : ['pan', 'tilt', 'zoom'].map(a => `<span class="cap ${caps[a] ? 'on' : ''}">${a.toUpperCase()}</span>`).join('');
       card.querySelector('.who').innerHTML = 'Steering: <b>' + holderText(cam) + '</b>';
+      card.querySelector('.label').textContent = cam.diag && cam.diag.label ? 'Camera: ' + cam.diag.label : '';
+
+      // Whether the OTHER table is receiving this camera — reported by that
+      // table, so a bad link shows up here even when both tables look fine.
+      const opp = cam.opponent && cams[cam.opponent];
+      card.querySelector('.link').textContent = opp
+        ? opp.name + ' table receiving it: ' + (LINK_TEXT[opp.link] || 'table offline')
+        : '';
+
+      const reason = cam.enabled && cam.caps && !(caps.pan || caps.tilt || caps.zoom) ? ptzWhy(cam) : '';
+      const why = card.querySelector('.why');
+      why.hidden = !reason;
+      why.textContent = reason;
       for (const button of card.querySelectorAll('[data-lock]')) {
         button.classList.toggle('on', button.dataset.lock === cam.lock);
       }
@@ -314,11 +382,20 @@
   socket.on('connect', () => {
     // The PIN rides along so the server lets this dashboard steer cameras.
     socket.emit('hello', { role: 'operator', pin });
+    viewSyncPending = true;
     $('link').innerHTML = '<span class="live">● CONNECTED</span>';
   });
   socket.on('disconnect', () => { $('link').textContent = 'server unreachable'; });
   socket.on('operator', data => { snapshot = data; render(); });
-  socket.on('cam:all', data => { cams = data; renderCams(); });
+  socket.on('cam:all', data => {
+    cams = data;
+    renderCams();
+    // First status after a (re)connect: reopen whichever views were on.
+    if (viewSyncPending) {
+      viewSyncPending = false;
+      for (const room of viewing) if (cams[room]) setView(room, true);
+    }
+  });
 
   api('/api/catalog').then(data => { catalog = data; render(); }).catch(() => {});
   pollLog();

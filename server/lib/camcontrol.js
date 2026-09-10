@@ -37,6 +37,20 @@ const clamp = (value, min, max) => {
   return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : 0;
 };
 
+// The table's own account of its camera (see diagnose() in table/lib/camctl.js).
+// Only known fields, trimmed — it ends up in the event log and on the dashboard.
+function cleanDiag(diag) {
+  if (!diag || typeof diag !== 'object') return null;
+  const text = (v, max) => (typeof v === 'string' ? v.slice(0, max) : null);
+  return {
+    label: text(diag.label, 120),
+    browser: text(diag.browser, 40),
+    browserPtz: !!diag.browserPtz,
+    ptzPermission: text(diag.ptzPermission, 20),
+    reported: Array.isArray(diag.reported) ? diag.reported.slice(0, 3).map(r => String(r).slice(0, 60)) : [],
+  };
+}
+
 class CamControl {
   constructor(config) {
     this.cams = new Map();
@@ -63,6 +77,8 @@ class CamControl {
         flipPan: ptz.invertPan ? -1 : 1,
         flipTilt: ptz.invertTilt ? -1 : 1,
         caps: null,          // { pan, tilt, zoom } booleans, reported by the owning table
+        diag: null,          // why caps are what they are, from the owning table
+        link: null,          // this room's table: is it receiving the other room's video?
         holder: null,        // 'gm' | 'owner' | 'opponent'
         holderUntil: 0,
       });
@@ -175,18 +191,33 @@ class CamControl {
 
   // The owning table reports what its camera can do once it has opened it,
   // and again on every reconnect. null means the table has gone.
-  setCaps(camKey, caps) {
+  setCaps(camKey, caps, diag) {
     const cam = this.cams.get(camKey);
     if (!cam) return;
     const next = caps ? { pan: !!caps.pan, tilt: !!caps.tilt, zoom: !!caps.zoom } : null;
-    if (JSON.stringify(next) === JSON.stringify(cam.caps)) return;
+    const nextDiag = next ? cleanDiag(diag) : null;
+    if (JSON.stringify([next, nextDiag]) === JSON.stringify([cam.caps, cam.diag])) return;
     cam.caps = next;
+    cam.diag = nextDiag;
     if (!next) {
       cam.holder = null;
       cam.holderUntil = 0;
+      cam.link = null;
     }
     const axes = next ? Object.keys(next).filter(a => next[a]) : [];
-    log.info(`Room ${camKey} camera ${next ? (axes.length ? 'steerable: ' + axes.join('/') : 'has no PTZ controls') : 'offline'}`);
+    if (!next) log.info(`Room ${camKey} camera offline`);
+    else if (axes.length) log.info(`Room ${camKey} camera steerable: ${axes.join('/')}`, nextDiag ? { camera: nextDiag.label } : undefined);
+    else log.warn(`Room ${camKey} camera has no PTZ controls`, nextDiag || undefined);
+    this.onChange(camKey);
+  }
+
+  // How this room's table is doing at receiving the OTHER room's video.
+  setLink(camKey, status) {
+    const cam = this.cams.get(camKey);
+    if (!cam) return;
+    const next = ['live', 'connecting', 'offline'].includes(status) ? status : null;
+    if (next === cam.link) return;
+    cam.link = next;
     this.onChange(camKey);
   }
 
@@ -206,10 +237,13 @@ class CamControl {
     return {
       key: cam.key,
       name: cam.name,
+      opponent: cam.opponent,
       opponentName: cam.opponentName,
       enabled: cam.enabled,
       lock: cam.lock,
       caps: cam.caps,
+      diag: cam.diag,
+      link: cam.link,
       holder: this.holderOf(cam),
     };
   }

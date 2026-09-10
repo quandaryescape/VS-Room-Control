@@ -533,14 +533,33 @@ camControl.onChange = () => {
   io.to('operators').emit('cam:all', camControl.all());
 };
 
+// GM camera view on the dashboard. It rides the same JPEG relay as the Wall
+// Takeover (the table pushes frames, /api/camstream serves them as MJPEG), and
+// a camera streams only while at least one dashboard has it switched on — so
+// a forgotten browser tab can't keep a table encoding frames all day.
+const GM_VIEW = { fps: 8, width: 640, quality: 0.55 };
+const gmViewers = new Map();   // roomKey -> Set(socket.id)
+
+function setGmView(roomKey, socketId, on) {
+  const viewers = gmViewers.get(roomKey) || new Set();
+  gmViewers.set(roomKey, viewers);
+  const before = viewers.size;
+  if (on) viewers.add(socketId);
+  else viewers.delete(socketId);
+  if (!before && viewers.size) engine.camWant(roomKey, 'gm', GM_VIEW);
+  if (before && !viewers.size) engine.camRelease(roomKey, 'gm');
+}
+
 function tablesOnline() {
   return Object.keys(config.rooms).filter(k => engine.room(k).tableConnected);
 }
 
 // Decide who makes the WebRTC offer so both tables don't offer at once.
+let lastNegotiation = 0;
 function negotiateVideo() {
   const online = tablesOnline().sort();
   if (online.length < 2) return;
+  lastNegotiation = Date.now();
   const [first, second] = online;
   io.to('table:' + first).emit('rtc:initiate', { peer: second });
   io.to('table:' + second).emit('rtc:standby', { peer: first });
@@ -628,9 +647,31 @@ io.on('connection', socket => {
   socket.on('cam:lock', camHandler((key, who, p) => (who === 'gm'
     ? camControl.setLock(key, p.lock)
     : { ok: false, error: 'only the game master can lock a camera' })));
-  socket.on('cam:caps', requireTable((room, p) => { camControl.setCaps(room, p.caps); }));
+  socket.on('cam:caps', requireTable((room, p) => { camControl.setCaps(room, p.caps, p.diag); }));
+
+  socket.on('cam:view', camHandler((key, who, p) => {
+    if (who !== 'gm') return { ok: false, error: 'only the game master can open a camera view' };
+    if (!engine.room(key)) return { ok: false, error: 'unknown room' };
+    setGmView(key, socket.id, !!p.on);
+    return { ok: true, stream: `/api/camstream/${encodeURIComponent(key)}.mjpg` };
+  }));
+
+  // ----- table-to-table video link health -----
+  socket.on('rtc:state', requireTable((room, p) => { camControl.setLink(room, p.status); }));
+
+  // A table whose link hasn't come up asks for the handshake to start over.
+  // Both tables tend to ask at about the same moment, and each negotiation
+  // restarts the other's, so only honour one request every few seconds.
+  socket.on('rtc:retry', () => {
+    if (socket.data.role !== 'table' || Date.now() - lastNegotiation < 8000) return;
+    log.info(`Room ${socket.data.room} asked to restart the camera link`);
+    negotiateVideo();
+  });
 
   socket.on('disconnect', () => {
+    if (socket.data.role === 'operator') {
+      for (const key of gmViewers.keys()) setGmView(key, socket.id, false);
+    }
     if (socket.data.role === 'table' && socket.data.room) {
       // Only mark the room offline if no other tab for that room is left
       // (a reload briefly overlaps the old and new connection).

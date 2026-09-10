@@ -38,6 +38,7 @@
   let lastRequested = null;
   let applying = false;
   let wired = false;
+  let diag = null;
 
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
@@ -122,12 +123,37 @@
     });
   }
 
+  // What the dashboard needs to explain a camera that can't be steered:
+  // which camera actually opened, whether this browser can do PTZ at all,
+  // and whether it has been allowed to move the camera.
+  async function diagnose(t) {
+    const d = {
+      label: t ? t.label : null,
+      browser: (navigator.userAgent.match(/(?:Chrome|Chromium|Edg)\/\d+/) || ['unknown'])[0],
+      browserPtz: false,
+      ptzPermission: 'unknown',
+      reported: [],
+    };
+    try {
+      const supported = navigator.mediaDevices.getSupportedConstraints();
+      d.browserPtz = !!(supported.pan && supported.tilt && supported.zoom);
+    } catch (e) {}
+    try {
+      d.ptzPermission = (await navigator.permissions.query({ name: 'camera', panTiltZoom: true })).state;
+    } catch (e) {}
+    const caps = t && t.getCapabilities ? t.getCapabilities() : {};
+    d.reported = AXES.filter(a => caps[a]).map(a => a + ' ' + caps[a].min + '..' + caps[a].max);
+    return d;
+  }
+
   function reportCaps() {
     // Only on a live connection. socket.io flushes buffered emits before the
     // 'connect' handlers run, which would put this ahead of the table's hello
     // and get it refused; the 'connect' listener below covers that case.
-    if (!socket || !socket.connected) return;
-    socket.emit('cam:caps', { caps: { pan: !!range.pan, tilt: !!range.tilt, zoom: !!range.zoom } });
+    // It also waits for the diagnosis, so the event log gets one line with
+    // the reason rather than a bare "no PTZ" followed by the explained one.
+    if (!socket || !socket.connected || !diag) return;
+    socket.emit('cam:caps', { caps: { pan: !!range.pan, tilt: !!range.tilt, zoom: !!range.zoom }, diag });
   }
 
   window.VSCamCtl = {
@@ -161,7 +187,12 @@
         setInterval(tick, TICK_MS);
       }
 
-      reportCaps();
+      // Report once the diagnosis is in, so the dashboard can say WHY a
+      // camera can't be steered rather than just that it can't.
+      diag = null;
+      diagnose(track)
+        .then(d => { diag = d; console.info('[ptz] diagnosis', d); }, () => { diag = {}; })
+        .then(reportCaps);
       const axes = Object.keys(range);
       if (axes.length) console.info('[ptz] steerable: ' + axes.join(', '), range);
       else console.info('[ptz] this camera has no pan/tilt/zoom controls, or Chrome was not granted them');

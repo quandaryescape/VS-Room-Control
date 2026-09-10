@@ -222,9 +222,10 @@ if [ "$WINDOWED" -eq 1 ]; then
   MODE_FLAGS=(--new-window "$URL")
   echo
   echo "  Windowed mode - same profile and flags as the kiosk."
-  echo "  To allow the camera for THIS profile:"
-  echo "    click the icon left of the address bar > Site settings > Camera"
-  echo "    > Allow, then reload. Or open chrome://settings/content/camera"
+  echo "  Chrome should ask to \"Use and move your camera\" - click Allow. That"
+  echo "  covers the picture AND steering, and is remembered for this profile."
+  echo "  If it doesn't ask: click the icon left of the address bar > Site"
+  echo "  settings > Camera > Allow (including moving the camera), then reload."
   echo "  To see whether the origin counts as secure at all, press F12 and run:"
   echo "    isSecureContext          -> must be true, or there is no camera"
   echo "    navigator.mediaDevices   -> undefined means the origin is insecure"
@@ -233,11 +234,16 @@ else
   MODE_FLAGS=(--kiosk "$URL")
 fi
 
+# No --use-fake-ui-for-media-stream. It auto-accepted the camera, but only
+# the picture: Chrome's fake prompt never grants the separate "move your
+# camera" (pan/tilt/zoom) permission, so the OBSBOT could not be steered.
+# Instead Chrome asks once - "Use and move your camera" - and remembers the
+# answer in this profile. Tap Allow on the table the first time, or run with
+# --windowed and click it.
 exec "$BROWSER" \
   "${MODE_FLAGS[@]}" \
   --user-data-dir="$PROFILE" \
   ${ORIGIN_FLAGS[@]+"${ORIGIN_FLAGS[@]}"} \
-  --use-fake-ui-for-media-stream \
   --autoplay-policy=no-user-gesture-required \
   --disable-features=TranslateUI,MediaRouter \
   --disable-pinch \
