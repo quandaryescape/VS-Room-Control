@@ -195,6 +195,12 @@ only streams while some dashboard has it switched on, and each browser
 remembers which views it had open. The view uses the same frame relay as the
 Wall Takeover, so the two can run at once.
 
+The table takes those frames straight from the camera track and compresses
+them on the CPU. On the tables' Intel graphics (Alder Lake-N, Mesa drivers),
+copying camera frames through the GPU several times a second crashed or hung
+Chrome within minutes. If a table's event-log line reads `frames {"path":"video"}`
+instead of `"cpu"`, its browser is using the older GPU route.
+
 The card also shows which physical camera the table opened, and whether the
 *other* table is receiving it (live / connecting… / no signal) — the quickest
 way to tell a network problem from a camera problem.

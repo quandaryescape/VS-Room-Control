@@ -99,80 +99,149 @@
   // projectors. mpv cannot receive WebRTC, so instead of streaming peer to
   // peer we grab frames off our own camera element and POST them as JPEGs; the
   // VS server republishes them as MJPEG, which mpv opens like any other URL.
+  // The GM's camera view on the dashboard rides the same frames.
 
   function startCamPush(opts) {
     stopCamPush();
     const video = $('localVideo');
-    // No early return when the camera isn't open yet: a table that has just
-    // (re)loaded is asked for frames before its camera is up, and grab()
-    // already skips until the video has a size.
     if (!video) return;
 
-    const fps = Math.max(2, Math.min(opts.fps || 12, 25));
-    const quality = opts.quality || 0.6;
-    const maxWidth = opts.width || 960;
-    let canvas = null;
-    let g = null;
-    let inFlight = false;
-    let grabStartedAt = 0;
-    let warnedStall = false;
+    const o = {
+      fps: Math.max(2, Math.min(opts.fps || 12, 25)),
+      quality: opts.quality || 0.6,
+      maxWidth: opts.width || 960,
+    };
 
     // Frames also go to the GM's dashboard; only a takeover is "on their walls".
     $('onAir').hidden = !opts.onAir;
 
-    // Every step here is asynchronous, so the page never sits waiting on the
-    // graphics chip. The previous drawImage(video) + toBlob pair could make
-    // the page wait on a GPU readback — tolerable for a 20-second takeover,
-    // but not for a GM camera view left running all game.
-    const grab = async () => {
-      // Skip rather than queue: on a slow link it is better to drop frames
-      // than to build a backlog and fall behind the room.
-      if (inFlight) {
-        if (!warnedStall && Date.now() - grabStartedAt > 5000) {
-          warnedStall = true;
-          console.warn('[cam] a frame grab has been stuck for 5s — frames paused');
+    camPush = window.MediaStreamTrackProcessor ? pushFromTrack(video, o) : pushFromVideo(video, o);
+    console.info('[cam] pushing frames at ' + o.fps + 'fps via ' + camPush.path);
+    report('frames', { path: camPush.path, fps: o.fps, width: o.maxWidth });
+  }
+
+  function stopCamPush() {
+    if (camPush) { camPush.stop(); camPush = null; }
+    const badge = $('onAir');
+    if (badge) badge.hidden = true;
+  }
+
+  function postFrame(blob) {
+    return fetch('/api/camframe/' + encodeURIComponent(roomKey), {
+      method: 'POST',
+      headers: { 'Content-Type': 'image/jpeg' },
+      body: blob,
+    });
+  }
+
+  // The preferred path: frames straight off the camera track, scaled and
+  // JPEG-encoded on the CPU, never touching the graphics chip. On the tables'
+  // Intel graphics (Alder Lake-N, Mesa), copying camera frames through a GPU
+  // canvas several times a second crashed or hung the page within minutes;
+  // this costs a few percent of one CPU core instead.
+  function pushFromTrack(video, o) {
+    let stopped = false;
+    let source = null;
+    let reader = null;
+    let waitTimer = null;
+    let inFlight = false;
+    // willReadFrequently keeps this canvas in ordinary memory, off the GPU.
+    const canvas = new OffscreenCanvas(1, 1);
+    const g = canvas.getContext('2d', { willReadFrequently: true });
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+    async function run(track) {
+      // A clone, so stopping this never touches the picture going to the
+      // other table or the preview on this one.
+      source = track.clone();
+      reader = new MediaStreamTrackProcessor({ track: source, maxBufferSize: 1 }).readable.getReader();
+      while (!stopped) {
+        let result;
+        try { result = await reader.read(); } catch (e) { break; }
+        if (result.done || !result.value) break;
+        const frame = result.value;
+        // Skip rather than queue: on a slow link it is better to drop frames
+        // than to build a backlog and fall behind the room.
+        if (!stopped && !inFlight) {
+          try {
+            const w = Math.min(o.maxWidth, frame.displayWidth);
+            const h = Math.round((frame.displayHeight / frame.displayWidth) * w);
+            if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+            g.drawImage(frame, 0, 0, w, h);
+            inFlight = true;
+            canvas.convertToBlob({ type: 'image/jpeg', quality: o.quality })
+              .then(postFrame)
+              .catch(() => {})
+              .finally(() => { inFlight = false; });
+          } catch (e) { /* a dropped frame is fine */ }
         }
-        return;
+        frame.close();
+        // The processor keeps only the newest frame while this waits.
+        await sleep(1000 / o.fps);
       }
+      if (source) { source.stop(); source = null; }
+      // The camera went away (unplugged, reopened): wait for it to return.
+      if (!stopped) waitForCamera();
+    }
+
+    // A table that has just (re)loaded is asked for frames before its camera
+    // is up, so wait for a live track rather than giving up.
+    function waitForCamera() {
+      const check = () => {
+        const stream = video.srcObject;
+        const track = stream && stream.getVideoTracks ? stream.getVideoTracks()[0] : null;
+        if (!track || track.readyState !== 'live') return false;
+        clearInterval(waitTimer);
+        waitTimer = null;
+        run(track).catch(err => console.warn('[cam] frame reader failed', err));
+        return true;
+      };
+      if (!check()) waitTimer = setInterval(check, 500);
+    }
+
+    waitForCamera();
+    return {
+      path: 'cpu',
+      stop() {
+        stopped = true;
+        clearInterval(waitTimer);
+        if (reader) reader.cancel().catch(() => {});
+        if (source) { source.stop(); source = null; }
+      },
+    };
+  }
+
+  // Fallback for browsers without MediaStreamTrackProcessor (Chrome and Edge
+  // have it). Goes through the video element, so the GPU may be involved.
+  function pushFromVideo(video, o) {
+    let canvas = null;
+    let g = null;
+    let inFlight = false;
+    const grab = async () => {
+      if (inFlight) return;
       const vw = video.videoWidth;
       const vh = video.videoHeight;
       if (!vw || !vh) return;
-
-      const w = Math.min(maxWidth, vw);
+      const w = Math.min(o.maxWidth, vw);
       const h = Math.round((vh / vw) * w);
       inFlight = true;
-      grabStartedAt = Date.now();
       try {
         const bitmap = await createImageBitmap(video, { resizeWidth: w, resizeHeight: h, resizeQuality: 'low' });
         if (!canvas || canvas.width !== w || canvas.height !== h) {
           canvas = new OffscreenCanvas(w, h);
-          g = canvas.getContext('2d');
+          g = canvas.getContext('2d', { willReadFrequently: true });
         }
         g.drawImage(bitmap, 0, 0);
         bitmap.close();
-        const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality });
-        await fetch('/api/camframe/' + encodeURIComponent(roomKey), {
-          method: 'POST',
-          headers: { 'Content-Type': 'image/jpeg' },
-          body: blob,
-        });
+        await postFrame(await canvas.convertToBlob({ type: 'image/jpeg', quality: o.quality }));
       } catch (e) {
         // A dropped frame is fine; the next tick tries again.
       } finally {
         inFlight = false;
-        warnedStall = false;
       }
     };
-
-    camPush = setInterval(grab, Math.round(1000 / fps));
-    grab();
-    console.info('[cam] pushing frames at ' + fps + 'fps');
-  }
-
-  function stopCamPush() {
-    if (camPush) { clearInterval(camPush); camPush = null; }
-    const badge = $('onAir');
-    if (badge) badge.hidden = true;
+    const timer = setInterval(grab, Math.round(1000 / o.fps));
+    return { path: 'video', stop() { clearInterval(timer); } };
   }
 
   // ------------------------------------------------------------------- boot

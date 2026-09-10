@@ -671,7 +671,7 @@ io.on('connection', socket => {
     }
     let detail = '';
     try { detail = JSON.stringify(p.detail || {}).slice(0, 600); } catch (e) {}
-    const say = kind === 'startup' ? log.info : log.warn;
+    const say = kind === 'stall' || kind === 'error' ? log.warn : log.info;
     say(`Room ${socket.data.room} table ${kind}`, { detail });
   });
 
