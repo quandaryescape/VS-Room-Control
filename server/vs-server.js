@@ -26,6 +26,7 @@ const log = logLib.scoped('server');
 const { Engine } = require('./lib/engine');
 const { QuandaryBridge } = require('./adapters/quandary');
 const { CamRelay } = require('./lib/camrelay');
+const { CamControl } = require('./lib/camcontrol');
 const sabotages = require('./lib/sabotages');
 const minigames = require('./lib/minigames');
 
@@ -43,6 +44,7 @@ for (const [key, room] of Object.entries(config.rooms)) {
 const quandary = new QuandaryBridge(config.quandary, quandaryRooms);
 const camRelay = new CamRelay();
 const engine = new Engine(config, quandary, camRelay);
+const camControl = new CamControl(config);
 quandary.start();
 
 // The Wall Player PCs fetch the camera stream from us over the LAN, so we need
@@ -146,10 +148,13 @@ function readBody(req) {
 
 // The operator PIN is a "keep players out of the dashboard" measure, not real
 // security — this whole system is meant to live on an isolated room network.
-function operatorAllowed(req, url) {
+function pinOk(supplied) {
   if (!config.operatorPin) return true;
-  const supplied = req.headers['x-vs-pin'] || url.searchParams.get('pin') || '';
-  return String(supplied) === String(config.operatorPin);
+  return String(supplied || '') === String(config.operatorPin);
+}
+
+function operatorAllowed(req, url) {
+  return pinOk(req.headers['x-vs-pin'] || url.searchParams.get('pin'));
 }
 
 // ---------- server ----------
@@ -462,7 +467,9 @@ const requestHandler = async (req, res) => {
           tableConnected: r.tableConnected,
         };
       }
-      return json(res, 200, { ok: true, probe: out, cameras: camRelay.stats(), serverUrl: engine.serverUrl });
+      return json(res, 200, {
+        ok: true, probe: out, cameras: camRelay.stats(), ptz: camControl.all(), serverUrl: engine.serverUrl,
+      });
     }
 
     if (route === 'GET /api/operator/quandary-rooms') {
@@ -515,6 +522,17 @@ engine.emit = (roomKey, event, payload) => {
   else io.to('table:' + roomKey).emit(event, payload);
 };
 
+// Camera steering. Commands go only to the table with that camera plugged in;
+// a change in who is steering goes to both tables (each shows its own camera
+// and the other room's) and to the dashboard.
+camControl.send = (roomKey, event, payload) => io.to('table:' + roomKey).emit(event, payload);
+camControl.onChange = () => {
+  for (const key of Object.keys(config.rooms)) {
+    io.to('table:' + key).emit('cam:status', camControl.forTable(key));
+  }
+  io.to('operators').emit('cam:all', camControl.all());
+};
+
 function tablesOnline() {
   return Object.keys(config.rooms).filter(k => engine.room(k).tableConnected);
 }
@@ -532,11 +550,15 @@ io.on('connection', socket => {
   socket.data.role = null;
   socket.data.room = null;
 
-  socket.on('hello', ({ role, room } = {}) => {
+  socket.on('hello', ({ role, room, pin } = {}) => {
     if (role === 'operator') {
       socket.data.role = 'operator';
+      // Watching needs no PIN (it never did). Steering a camera does: the GM
+      // outranks both teams and can lock them out of their own camera.
+      socket.data.gm = pinOk(pin);
       socket.join('operators');
       socket.emit('operator', engine.operatorSnapshot());
+      socket.emit('cam:all', camControl.all());
       log.info('Operator dashboard connected');
       return;
     }
@@ -547,6 +569,7 @@ io.on('connection', socket => {
       engine.setTableConnected(room, true);
       socket.emit('state', engine.snapshot(room));
       socket.emit('catalog', { sounds: config.sounds || [] });
+      socket.emit('cam:status', camControl.forTable(room));
       negotiateVideo();
       return;
     }
@@ -577,6 +600,36 @@ io.on('connection', socket => {
     io.to('table:' + to).emit('rtc:signal', { from: socket.data.room, data });
   });
 
+  // ----- camera pan/tilt/zoom -----
+  // Tables name the camera as 'self' or 'opponent'; the dashboard names the
+  // room. camControl ranks GM > own team > other team and hands the motor to
+  // the winner.
+  function camRequest(p) {
+    if (socket.data.role === 'operator') {
+      return socket.data.gm ? { key: p.room, who: 'gm' } : { error: 'operator PIN required' };
+    }
+    if (socket.data.role === 'table' && socket.data.room) {
+      const own = socket.data.room;
+      const key = p.cam === 'opponent' ? engine.room(own).opponent : own;
+      return { key, who: camControl.roleOf(key, own) };
+    }
+    return { error: 'not a table or operator client' };
+  }
+
+  const camHandler = act => (payload, ack) => {
+    const p = payload || {};
+    const req = camRequest(p);
+    const result = req.error ? { ok: false, error: req.error } : act(req.key, req.who, p);
+    if (typeof ack === 'function') ack(result);
+  };
+
+  socket.on('cam:drive', camHandler((key, who, p) => camControl.drive(key, who, p.vector)));
+  socket.on('cam:home', camHandler((key, who) => camControl.home(key, who)));
+  socket.on('cam:lock', camHandler((key, who, p) => (who === 'gm'
+    ? camControl.setLock(key, p.lock)
+    : { ok: false, error: 'only the game master can lock a camera' })));
+  socket.on('cam:caps', requireTable((room, p) => { camControl.setCaps(room, p.caps); }));
+
   socket.on('disconnect', () => {
     if (socket.data.role === 'table' && socket.data.room) {
       // Only mark the room offline if no other tab for that room is left
@@ -584,6 +637,7 @@ io.on('connection', socket => {
       const remaining = io.sockets.adapter.rooms.get('table:' + socket.data.room);
       if (!remaining || remaining.size === 0) {
         engine.setTableConnected(socket.data.room, false);
+        camControl.setCaps(socket.data.room, null);
         io.emit('rtc:peer-gone', { peer: socket.data.room });
       }
     }
@@ -637,6 +691,7 @@ if (httpsServer) {
 function shutdown(signal) {
   log.info(`${signal} received — restoring rooms and shutting down`);
   engine.shutdown();
+  camControl.shutdown();
   quandary.stopAll();
   setTimeout(() => process.exit(0), 800);
 }

@@ -62,7 +62,17 @@
       "camera": {
         "enabled": true,
         "label": "",
-        "//label": "Optional substring of the USB camera's device label, if the PC has more than one camera."
+        "//label": "Optional substring of the USB camera's device label, if the PC has more than one camera. KNOWN ISSUE: not yet passed to the table - use ?cam=OBSBOT on the table URL instead (see docs/HARDWARE.md).",
+        "ptz": {
+          "enabled": true,
+          "lock": "open",
+          "//lock": "Who may steer this camera when the server starts: open (both teams) | owner (only this room's team) | gm (only the game master). The GM changes it live from the operator dashboard.",
+          "home": { "pan": 0, "tilt": 0, "zoom": 0 },
+          "//home": "Where the home button points the camera. pan/tilt: -1 (left/down) to 1 (right/up), 0 = centre. zoom: 0 (widest) to 1 (tightest).",
+          "invertPan": false,
+          "invertTilt": false,
+          "//invert": "Flip if the arrows move the picture the wrong way, e.g. a camera mounted upside down."
+        }
       }
     },
 
@@ -86,7 +96,14 @@
 
       "camera": {
         "enabled": true,
-        "label": ""
+        "label": "",
+        "ptz": {
+          "enabled": true,
+          "lock": "open",
+          "home": { "pan": 0, "tilt": 0, "zoom": 0 },
+          "invertPan": false,
+          "invertTilt": false
+        }
       }
     }
   },

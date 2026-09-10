@@ -34,6 +34,14 @@
   let gameGen = 0;
   let defuseGen = 0;
 
+  // Camera steering. `steerOwn` flips the feed between THEIR camera (the
+  // default) and this table's own, and decides which one the edge buttons move.
+  let camStatus = null;       // { own, opponent } from the server
+  let steerOwn = false;
+  let ownTouched = 0;
+  let camDeniedAt = 0;
+  let camGrabbedAt = 0;
+
   // ---------------------------------------------------------------- helpers
 
   const serverNow = () => Date.now() + clockSkew;
@@ -191,7 +199,7 @@
           if (detail) console.warn('[video]', detail);
         }
       },
-    });
+    }).then(() => VSCamCtl.attach(VSVideo.stream(), socket));
   }
 
   // ------------------------------------------------------------------ socket
@@ -226,6 +234,21 @@
     socket.on('cam:push', opts => startCamPush(opts || {}));
     socket.on('cam:stop', () => stopCamPush());
 
+    socket.on('cam:status', next => {
+      const was = camStatus && camStatus.own && camStatus.own.holder;
+      camStatus = next;
+      // Tell a team when the other room grabs their camera, and how to take
+      // it back — they outrank the other room on their own camera.
+      if (next.own && next.own.holder === 'opponent' && was !== 'opponent'
+          && Date.now() - camGrabbedAt > 20000) {
+        camGrabbedAt = Date.now();
+        toast(steerOwn
+          ? 'They\'re steering your camera — press any arrow to take it back.'
+          : 'They\'re steering your camera — tap your camera preview to take it back.', 'bad');
+      }
+      renderCam();
+    });
+
     socket.on('incoming', payload => showIncoming(payload));
     socket.on('fired', payload => showFired(payload));
     socket.on('toast', ({ text, tone }) => toast(text, tone));
@@ -251,7 +274,7 @@
     $('roomName').textContent = state.name.toUpperCase();
     $('oppName').textContent = state.opponentName.toUpperCase();
     $('readyOpp').textContent = state.opponentName;
-    $('feedTitle').textContent = state.opponentName.toUpperCase() + ' CAM';
+    $('feedTitle').textContent = steerOwn ? 'YOUR CAM' : state.opponentName.toUpperCase() + ' CAM';
     $('tally').textContent = state.sabotagesUsed;
 
     const opp = state.opponentState;
@@ -341,6 +364,7 @@
       $('defuseBar').style.width = pct(left, d.defuse);
     }
     if (game && state.attempt) renderGameClock();
+    if (steerOwn && Date.now() - ownTouched > OWN_CAM_IDLE_MS) setSteerOwn(false);
   }, 250);
 
   // ------------------------------------------------------------ mini-games
@@ -561,6 +585,86 @@
     defuseToken = null;
     $('defuseLayer').hidden = true;
   }
+
+  // --------------------------------------------------------- camera steering
+  //
+  // The edge buttons over the feed steer a camera — theirs by default, or this
+  // table's own after tapping the corner preview of it. Nothing moves locally:
+  // every press goes to the server, which decides who wins (GM, then the
+  // camera's own team, then the other team) and passes the winner's commands
+  // to whichever table has that camera plugged in (lib/camctl.js).
+
+  const OWN_CAM_IDLE_MS = 15000;   // drift back to their camera after this long untouched
+
+  const camPad = VSCamPad($('camCtl'), {
+    drive: vector => steer('cam:drive', { vector }),
+    home: () => steer('cam:home', {}),
+  });
+
+  function steer(event, payload) {
+    if (!socket) return;
+    if (steerOwn) ownTouched = Date.now();
+    payload.cam = steerOwn ? 'self' : 'opponent';
+    socket.emit(event, payload, result => {
+      // A held button repeats several times a second; one toast is plenty.
+      if (result && !result.ok && Date.now() - camDeniedAt > 2500) {
+        camDeniedAt = Date.now();
+        toast(result.error, 'bad');
+      }
+    });
+  }
+
+  const canSteer = cam => !!(cam && cam.enabled && cam.caps
+    && (cam.caps.pan || cam.caps.tilt || cam.caps.zoom));
+
+  // `me` is 'owner' for this table's own camera, 'opponent' for theirs.
+  function camView(cam, me) {
+    if (!canSteer(cam)) return { steerable: false, text: '' };
+    if (cam.lock === 'gm' || (cam.lock === 'owner' && me === 'opponent')) {
+      return { steerable: false, text: '🔒 LOCKED BY GM', tone: 'bad' };
+    }
+    if (cam.holder === 'gm') return { steerable: true, busy: true, text: 'GM IS STEERING', tone: 'bad' };
+    if (cam.holder === me) return { steerable: true, text: 'YOU\'RE STEERING', tone: 'good' };
+    if (cam.holder) return { steerable: true, busy: me === 'opponent', text: 'THEY\'RE STEERING', tone: 'warn' };
+    return { steerable: true, text: 'HOLD AN EDGE TO STEER' };
+  }
+
+  function renderCam() {
+    const cam = camStatus && (steerOwn ? camStatus.own : camStatus.opponent);
+    const view = camView(cam, steerOwn ? 'owner' : 'opponent');
+    const ctl = $('camCtl');
+    if (!view.steerable) camPad.stop();
+    ctl.hidden = !view.steerable;
+    ctl.classList.toggle('busy', !!view.busy);
+    if (view.steerable) {
+      for (const axis of ['pan', 'tilt', 'zoom']) {
+        for (const button of ctl.querySelectorAll('[data-' + axis + ']')) button.hidden = !cam.caps[axis];
+      }
+    }
+    $('camWho').textContent = view.text;
+    $('camWho').className = 'cam-who' + (view.tone ? ' ' + view.tone : '');
+  }
+
+  function setSteerOwn(on) {
+    if (steerOwn === on) return;
+    camPad.stop();                // a held button belongs to the camera it was pressed on
+    steerOwn = on;
+    ownTouched = Date.now();
+    $('feedBody').classList.toggle('own', on);
+    if (state) $('feedTitle').textContent = on ? 'YOUR CAM' : state.opponentName.toUpperCase() + ' CAM';
+    renderCam();
+  }
+
+  // The corner preview is always the OTHER camera: tap it to swap.
+  $('localVideo').addEventListener('click', () => {
+    if (steerOwn) return;
+    if (!canSteer(camStatus && camStatus.own)) {
+      toast('This table\'s camera can\'t be steered.', 'bad');
+      return;
+    }
+    setSteerOwn(true);
+  });
+  $('remoteVideo').addEventListener('click', () => { if (steerOwn) setSteerOwn(false); });
 
   // ---------------------------------------------------------------- kick off
 

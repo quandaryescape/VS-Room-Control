@@ -92,6 +92,31 @@
   .fire button:hover { border-color: var(--lamp); color: var(--lamp); }
   .muted { color: var(--dim); font: 12px var(--mono); }
 
+  .cams { display: grid; grid-template-columns: repeat(auto-fit, minmax(430px, 1fr)); gap: 16px; margin-bottom: 26px; }
+  .cam {
+    border: 1px solid var(--line); border-radius: 10px; background: var(--panel);
+    padding: 14px 16px; display: flex; gap: 18px; align-items: center; flex-wrap: wrap;
+  }
+  .cam .info { flex: 1; min-width: 220px; display: grid; gap: 9px; }
+  .cam .title { font: 700 15px var(--sans); }
+  .cam .who { font: 12px var(--mono); color: var(--dim); }
+  .cam .who b { color: var(--lamp); }
+  .locks { display: flex; }
+  .locks button { border-radius: 0; margin-left: -1px; white-space: nowrap; }
+  .locks button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+  .locks button:last-child { border-radius: 0 6px 6px 0; }
+  .locks button.on { background: var(--lamp); border-color: var(--lamp); color: #241a06; }
+  .pad {
+    display: grid; grid-template-columns: repeat(3, 44px) 14px 44px;
+    grid-template-rows: repeat(3, 44px); gap: 4px; user-select: none;
+  }
+  .pad button { padding: 0; font-size: 16px; touch-action: none; }
+  .pad button.held { background: var(--lamp); border-color: var(--lamp); color: #241a06; }
+  .pad .u { grid-area: 1 / 2; } .pad .l { grid-area: 2 / 1; } .pad .h { grid-area: 2 / 2; }
+  .pad .r { grid-area: 2 / 3; } .pad .d { grid-area: 3 / 2; }
+  .pad .zi { grid-area: 1 / 5; } .pad .zo { grid-area: 3 / 5; }
+  .pad.dead { opacity: .35; pointer-events: none; }
+
   h3 { font: 600 12px var(--mono); letter-spacing: .2em; text-transform: uppercase; color: var(--dim); margin: 0 0 10px; }
   .log {
     border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2);
@@ -132,6 +157,9 @@
 
 <div class="rooms" id="rooms"></div>
 
+<h3>Cameras</h3>
+<div class="cams" id="cams"><span class="muted">waiting for the server…</span></div>
+
 <h3>Event log</h3>
 <div class="log" id="log"></div>
 <div id="probe"></div>
@@ -139,6 +167,7 @@
 <div id="toast"></div>
 
 <script src="/socket.io/socket.io.js"></script>
+<script src="/table/lib/campad.js"></script>
 <script src="operator.js"></script>
 </body>
 </html>

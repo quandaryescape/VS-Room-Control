@@ -110,10 +110,13 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
   width: 1.2vmin; height: 1.2vmin; border-radius: 50%; background: var(--danger);
   animation: throb 1.4s infinite;
 }
-.feed-body { flex: 1; position: relative; min-height: 0; background: #000; }
-#remoteVideo { width: 100%; height: 100%; object-fit: cover; display: block; }
+.feed-body { flex: 1; position: relative; min-height: 0; background: #000; overflow: hidden; }
+#remoteVideo {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; display: block; z-index: 1;
+}
 .feed-off {
-  position: absolute; inset: 0; display: flex; flex-direction: column;
+  position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 2vmin;
   font: 2.4vmin var(--mono); letter-spacing: .3em; color: #4a5468;
   background: #05070b;
@@ -125,17 +128,53 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: none; ba
 }
 @keyframes roll { to { background-position: 0 60px; } }
 .feed-off span { position: relative; }
-#localVideo {
-  position: absolute; right: 1.6vmin; bottom: 7vmin;
-  width: 11vmin; aspect-ratio: 4/3; object-fit: cover;
-  border: 1px solid var(--line); border-radius: .8vmin; opacity: .55;
-  background: #000;
+/* This table's own camera. Normally a corner preview; while the team steers
+   it, it takes the whole feed and THEIR camera shrinks into the corner. So the
+   corner is always "the other camera", and tapping it swaps. */
+#localVideo, .feed-body.own #remoteVideo {
+  position: absolute; inset: auto; right: 1.6vmin; bottom: 1.6vmin;
+  width: 13vmin; height: auto; aspect-ratio: 4/3; object-fit: cover;
+  border: 1px solid var(--line); border-radius: .8vmin; opacity: .6;
+  background: #000; z-index: 4;
 }
+.feed-body.own #localVideo {
+  inset: 0; width: 100%; height: 100%; aspect-ratio: auto;
+  border: none; border-radius: 0; opacity: 1; z-index: 1;
+}
+.feed-body.own .feed-off { display: none; }
+
+/* Camera steering: hold an edge to look that way. Big and faint, so they read
+   as part of the picture until a finger lands on one. */
+.cam-ctl { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+.cam-ctl button {
+  position: absolute; pointer-events: auto; touch-action: none;
+  display: flex; align-items: center; justify-content: center;
+  font: 700 3.4vmin/1 var(--mono); color: #fff; opacity: .4;
+  background: rgba(5, 7, 11, .35); border-radius: 1vmin;
+  transition: opacity .12s, background .12s;
+}
+.cam-ctl button.held { opacity: 1; background: var(--accent); color: var(--accent-ink); }
+.cam-ctl.busy button { opacity: .15; }
+.cam-edge.up, .cam-edge.down { left: 30%; right: 30%; height: 9vmin; }
+.cam-edge.up { top: 1.6vmin; }
+.cam-edge.down { bottom: 1.6vmin; }
+.cam-edge.left, .cam-edge.right { top: 30%; bottom: 30%; width: 9vmin; }
+.cam-edge.left { left: 1.6vmin; }
+.cam-edge.right { right: 1.6vmin; }
+.cam-ctl .cam-corner { width: 9vmin; height: 9vmin; font-size: 4.4vmin; }
+.cam-corner.zoom-in { top: 1.6vmin; left: 1.6vmin; }
+.cam-corner.zoom-out { bottom: 1.6vmin; left: 1.6vmin; }
+.cam-corner.home { top: 1.6vmin; right: 1.6vmin; }
+
+.cam-who { margin-left: auto; letter-spacing: .16em; }
+.cam-who.good { color: var(--good); }
+.cam-who.warn { color: var(--accent); }
+.cam-who.bad { color: var(--danger); }
 
 /* Shown on the saboteur's own table while their camera is up on the other
    room's projectors, so they know the taunt is actually landing. */
 #onAir {
-  position: absolute; right: 1.6vmin; bottom: 5.6vmin;
+  position: absolute; right: 1.6vmin; bottom: 12vmin; z-index: 5;
   background: var(--danger); color: #fff;
   font: 800 1.3vmin var(--mono); letter-spacing: .18em;
   padding: .5vmin 1vmin; border-radius: .5vmin;

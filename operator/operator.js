@@ -166,6 +166,103 @@
     }
   }
 
+  // ---------------------------------------------------------------- cameras
+  //
+  // Built once and then updated in place, unlike the room cards: those are
+  // rebuilt every second, and a hold-to-steer button that is replaced mid-press
+  // never hears the mouse come back up.
+
+  let cams = null;
+  let camDeniedAt = 0;
+  const LOCKS = [
+    ['open', 'Both teams'],
+    ['owner', 'Own team only'],
+    ['gm', 'GM only'],
+  ];
+
+  function camEmit(event, payload, onOk) {
+    socket.emit(event, payload, result => {
+      if (result && result.ok) { if (onOk) onOk(); return; }
+      // Held buttons repeat several times a second; one toast is enough.
+      if (Date.now() - camDeniedAt > 2500) {
+        camDeniedAt = Date.now();
+        toast((result && result.error) || 'camera command failed', true);
+      }
+    });
+  }
+
+  function holderText(cam) {
+    if (!cam.holder) return 'nobody';
+    if (cam.holder === 'gm') return 'GM';
+    if (cam.holder === 'owner') return esc(cam.name) + ' (own team)';
+    return esc(cam.opponentName || 'the other room') + ' (other team)';
+  }
+
+  function camCard(key) {
+    return `
+    <div class="cam" data-cam="${esc(key)}">
+      <div class="info">
+        <div class="title"></div>
+        <div class="caps"></div>
+        <div class="who"></div>
+        <div class="locks">${LOCKS.map(([id, label]) =>
+          `<button class="sm" data-lock="${id}">${label}</button>`).join('')}</div>
+      </div>
+      <div class="pad">
+        <button class="u" data-tilt="1" title="Tilt up">▲</button>
+        <button class="l" data-pan="-1" title="Pan left">◀</button>
+        <button class="h" data-home title="Recentre">⌂</button>
+        <button class="r" data-pan="1" title="Pan right">▶</button>
+        <button class="d" data-tilt="-1" title="Tilt down">▼</button>
+        <button class="zi" data-zoom="1" title="Zoom in">+</button>
+        <button class="zo" data-zoom="-1" title="Zoom out">−</button>
+      </div>
+    </div>`;
+  }
+
+  function renderCams() {
+    const host = $('cams');
+    const keys = Object.keys(cams || {});
+    if (!keys.length) return;
+
+    if (host.dataset.keys !== keys.join(',')) {
+      host.dataset.keys = keys.join(',');
+      host.innerHTML = keys.map(camCard).join('');
+      for (const card of host.querySelectorAll('[data-cam]')) {
+        const room = card.dataset.cam;
+        VSCamPad(card.querySelector('.pad'), {
+          drive: vector => camEmit('cam:drive', { room, vector }),
+          home: () => camEmit('cam:home', { room }),
+        });
+        for (const button of card.querySelectorAll('[data-lock]')) {
+          button.addEventListener('click', () =>
+            camEmit('cam:lock', { room, lock: button.dataset.lock },
+              () => toast(cams[room].name + ' camera: ' + button.textContent)));
+        }
+      }
+    }
+
+    for (const card of host.querySelectorAll('[data-cam]')) {
+      const cam = cams[card.dataset.cam];
+      const caps = cam.caps || {};
+      card.querySelector('.title').textContent = cam.name + ' camera';
+      card.querySelector('.caps').innerHTML = !cam.enabled
+        ? '<span class="cap">STEERING OFF IN CONFIG</span>'
+        : !cam.caps
+          ? '<span class="cap">TABLE OFFLINE</span>'
+          : ['pan', 'tilt', 'zoom'].map(a => `<span class="cap ${caps[a] ? 'on' : ''}">${a.toUpperCase()}</span>`).join('');
+      card.querySelector('.who').innerHTML = 'Steering: <b>' + holderText(cam) + '</b>';
+      for (const button of card.querySelectorAll('[data-lock]')) {
+        button.classList.toggle('on', button.dataset.lock === cam.lock);
+      }
+      const pad = card.querySelector('.pad');
+      pad.classList.toggle('dead', !(cam.enabled && (caps.pan || caps.tilt || caps.zoom)));
+      for (const axis of ['pan', 'tilt', 'zoom']) {
+        for (const button of pad.querySelectorAll('[data-' + axis + ']')) button.hidden = !!cam.caps && !caps[axis];
+      }
+    }
+  }
+
   // -------------------------------------------------------------------- log
 
   function renderLog(entries) {
@@ -215,11 +312,13 @@
   const socket = io({ transports: ['websocket', 'polling'] });
 
   socket.on('connect', () => {
-    socket.emit('hello', { role: 'operator' });
+    // The PIN rides along so the server lets this dashboard steer cameras.
+    socket.emit('hello', { role: 'operator', pin });
     $('link').innerHTML = '<span class="live">● CONNECTED</span>';
   });
   socket.on('disconnect', () => { $('link').textContent = 'server unreachable'; });
   socket.on('operator', data => { snapshot = data; render(); });
+  socket.on('cam:all', data => { cams = data; renderCams(); });
 
   api('/api/catalog').then(data => { catalog = data; render(); }).catch(() => {});
   pollLog();

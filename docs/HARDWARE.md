@@ -149,6 +149,80 @@ If a table PC has both an internal webcam and your USB camera, set a hint:
 It matches a substring of the device label. You can also override per-launch
 with `?cam=Logitech` on the table URL.
 
+> **Known issue:** `camera.label` in `config.json` is not actually passed to
+> the table yet — the table only reads `?cam=` from its URL (see `startVideo()`
+> in `table/table.js`). Until that is wired up, put the hint in the table URL,
+> e.g. `/table/?room=A&cam=OBSBOT`. The fix is to send the label down with the
+> room state and have the table wait for it before opening the camera.
+
+### Steering the cameras (OBSBOT Tiny 4K)
+
+The tables are built around the OBSBOT Tiny 4K, a USB webcam on a two-axis
+gimbal with digital zoom. Any camera that exposes standard UVC pan/tilt/zoom
+controls works the same way; one without them still shows its picture, just
+with no steering controls.
+
+**On the table.** Faint arrows sit around the edges of the feed. By default
+they steer the *other* room's camera. Tap the small preview of your own camera
+in the corner and the feed swaps to it, so the arrows steer yours. Tap the
+corner again, or leave it alone for 15 seconds, to swap back. Hold an arrow to
+move, **+** / **−** to zoom, and **⌂** to go back to the home position.
+
+**Who wins.** When two people steer the same camera, the higher rank wins:
+
+| Rank | Who | |
+|---|---|---|
+| 1 | Game master (operator dashboard) | always wins, and can lock the others out |
+| 2 | The team whose camera it is | overrides the other team immediately |
+| 3 | The other team | only gets it when nobody above is using it |
+
+Whoever is steering keeps the camera for two seconds after they let go, so the
+other team can't slip commands in between the owners' taps. When the other
+room grabs a team's camera, that table shows a notice saying how to take it
+back.
+
+**GM lock.** The operator dashboard has a **Cameras** section with a pad for
+each camera and a three-way lock: *Both teams* (the default), *Own team only*
+(the other room is locked out), and *GM only*. Locking out someone mid-move
+stops the camera at once. The lock resets to `ptz.lock` from `config.json` when
+the server restarts. Steering from the dashboard needs the operator PIN, if
+one is set. The dashboard has no video of its own, so steer while watching the
+room CCTV or the table.
+
+```json
+"camera": {
+  "enabled": true,
+  "ptz": {
+    "enabled": true,
+    "lock": "open",
+    "home": { "pan": 0, "tilt": 0, "zoom": 0 },
+    "invertPan": false,
+    "invertTilt": false
+  }
+}
+```
+
+`home` is where **⌂** points: pan and tilt run from -1 to 1 with 0 at centre,
+zoom from 0 (widest) to 1 (tightest). Set `invertPan` / `invertTilt` if the
+arrows move the picture the wrong way — a camera mounted upside down, say.
+
+**Setting up the OBSBOT.**
+
+- In the OBSBOT WebCam app, turn off **AI tracking** and **gesture control**
+  before the camera goes into the room. Tracking fights manual steering, and
+  with gestures on a player's wave can re-enable tracking or change the zoom.
+- Chrome needs permission to *move* the camera as well as to see through it.
+  `Start-Table.bat` and `start-table.sh` pass `--use-fake-ui-for-media-stream`,
+  which grants both without a prompt. In an ordinary browser window you get a
+  separate "use and move your camera" prompt.
+- If the table PC also has a built-in webcam, make sure the OBSBOT is the one
+  opened: add `?cam=OBSBOT` to the table URL.
+
+**Checking it.** Each camera card on the dashboard shows PAN / TILT / ZOOM
+chips as the table reports them. Greyed-out chips mean Chrome either sees a
+camera without those controls or was not granted permission to move it. The
+table's browser console also logs a `[ptz]` line when the camera opens.
+
 ---
 
 ## Audio

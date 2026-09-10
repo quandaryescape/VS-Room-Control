@@ -45,20 +45,33 @@
       <div class="feed-head">
         <span class="live-dot"></span>
         <span id="feedTitle">OPPONENT CAM</span>
+        <span id="camWho" class="cam-who"></span>
       </div>
-      <div class="feed-body">
+      <div class="feed-body" id="feedBody">
         <video id="remoteVideo" autoplay playsinline muted></video>
         <div id="feedOff" class="feed-off">
           <div class="static"></div>
           <span>NO SIGNAL</span>
         </div>
+        <!-- this table's own camera: a corner preview, or the whole feed
+             while the team is steering it (.feed-body.own) -->
+        <video id="localVideo" autoplay playsinline muted></video>
+        <!-- hold an edge to steer; see lib/campad.js -->
+        <div id="camCtl" class="cam-ctl" hidden>
+          <button class="cam-edge up" data-tilt="1" aria-label="Tilt up">▲</button>
+          <button class="cam-edge down" data-tilt="-1" aria-label="Tilt down">▼</button>
+          <button class="cam-edge left" data-pan="-1" aria-label="Pan left">◀</button>
+          <button class="cam-edge right" data-pan="1" aria-label="Pan right">▶</button>
+          <button class="cam-corner zoom-in" data-zoom="1" aria-label="Zoom in">+</button>
+          <button class="cam-corner zoom-out" data-zoom="-1" aria-label="Zoom out">−</button>
+          <button class="cam-corner home" data-home aria-label="Recentre">⌂</button>
+        </div>
+        <div id="onAir" hidden>● ON THEIR WALLS</div>
       </div>
       <div class="feed-foot">
         <span id="oppPhase">—</span>
         <span id="oppLast"></span>
       </div>
-      <video id="localVideo" autoplay playsinline muted></video>
-      <div id="onAir" hidden>● ON THEIR WALLS</div>
     </aside>
 
     <!-- ---- right: the action panel ---- -->
@@ -192,6 +205,8 @@
 <script src="games/scaffold.js"></script>
 <script src="games/bricks.js"></script>
 <script src="lib/video.js"></script>
+<script src="lib/campad.js"></script>
+<script src="lib/camctl.js"></script>
 <script src="table.js"></script>
 </body>
 </html>

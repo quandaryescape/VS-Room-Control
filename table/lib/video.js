@@ -33,7 +33,17 @@
         + 'Launch it with Start-Table.bat, or serve the table over HTTPS.');
     }
 
-    const constraints = { video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 24 } }, audio: false };
+    // pan/tilt/zoom: true asks Chrome for the right to MOVE the camera as well
+    // as see through it (lib/camctl.js steers the OBSBOT's gimbal). It is a
+    // request, not a requirement: a camera with no motor opens exactly as
+    // before and simply reports nothing to steer.
+    const constraints = {
+      video: {
+        width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 24 },
+        pan: true, tilt: true, zoom: true,
+      },
+      audio: false,
+    };
 
     // If more than one camera is attached (many table PCs have an internal
     // webcam as well), pick the one whose label matches the config hint.
@@ -174,6 +184,7 @@
     },
 
     hasCamera() { return !!localStream; },
+    stream() { return localStream; },
     retryCamera(label) { return openCamera(label); },
   };
 })();

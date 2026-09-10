@@ -42,6 +42,13 @@ installed but a browser.
   camera looks redundant, but it is what keeps the projector PCs completely
   unchanged — no second browser window fighting mpv for the screen, and no
   z-order to manage on a machine that has to be reliable for three hours a day.
+- **Camera steering (pan/tilt/zoom)**: Socket.IO, through the VS server. Only
+  the table a camera is plugged into can move it, but the team next door and
+  the GM steer it too — so every steering input, the owning team's included,
+  goes to `server/lib/camcontrol.js`. That ranks GM > owning team > other
+  team, and forwards one stream of velocity commands to the owning table.
+  Each command expires after half a second unless repeated, so a crashed page
+  or a lost release can never leave a camera slewing into its end stop.
 - **VS server → Wall Player**: plain HTTP POST with an optional shared token.
 - **VS server ↔ Quandary**: Socket.IO as a GM client for the timer, plus the
   REST API for variables.
