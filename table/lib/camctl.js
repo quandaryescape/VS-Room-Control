@@ -23,6 +23,8 @@
   const AXES = ['pan', 'tilt', 'zoom'];
   const TICK_MS = 50;
   const DRIVE_TTL_MS = 450;
+  // At most one motor command this often (see flush).
+  const MIN_APPLY_MS = 125;
   // Full-deflection speed in normalised units per second: pan and tilt cross
   // their whole range in about four seconds, zoom in about two.
   const SPEED = { pan: 0.5, tilt: 0.5, zoom: 0.5 };
@@ -37,6 +39,8 @@
   let queued = null;
   let lastRequested = null;
   let applying = false;
+  let lastApplyAt = 0;
+  let flushTimer = null;
   let wired = false;
   let diag = null;
 
@@ -71,37 +75,50 @@
 
   // Start from wherever the camera really is: it keeps its position across a
   // page reload, and someone may have moved it from the OBSBOT app.
+  // Also records it as what was last sent, so the first command after this
+  // carries only the axes that actually move.
   function readPosition() {
     const settings = track && track.getSettings ? track.getSettings() : {};
     for (const axis of Object.keys(range)) {
-      if (typeof settings[axis] === 'number') pos[axis] = toNorm(axis, settings[axis]);
+      if (typeof settings[axis] !== 'number') continue;
+      pos[axis] = toNorm(axis, settings[axis]);
+      lastRequested = Object.assign({}, lastRequested, { [axis]: settings[axis] });
     }
   }
 
   function moveTo(target) {
-    const c = {};
+    const changed = {};
     for (const axis of Object.keys(range)) {
       const n = Number(target[axis]);
       if (Number.isFinite(n)) pos[axis] = axis === 'zoom' ? clamp(n, 0, 1) : clamp(n, -1, 1);
-      c[axis] = toDevice(axis, pos[axis]);
+      const value = toDevice(axis, pos[axis]);
+      // Only the axes that actually move. Each one is a separate USB control
+      // request to the camera, so panning shouldn't also re-send tilt and zoom
+      // every time — and a button held against an end stop sends nothing.
+      if (!lastRequested || lastRequested[axis] !== value) changed[axis] = value;
     }
-    // Held against an end stop, every tick lands on the same value — don't
-    // keep asking the motor for somewhere it already is.
-    if (lastRequested && Object.keys(c).every(a => c[a] === lastRequested[a])) return;
-    lastRequested = c;
-    queued = c;
+    if (!Object.keys(changed).length) return;
+    lastRequested = Object.assign({}, lastRequested, changed);
+    queued = Object.assign(queued || {}, changed);
     flush();
   }
 
-  // One applyConstraints in flight at a time. A UVC motor command is slow next
-  // to a 20 Hz tick, and letting them pile up makes the camera keep moving for
-  // a second after the button is released. A newer target simply replaces one
-  // that has not been sent yet.
+  // One applyConstraints in flight at a time, and no more than one every
+  // MIN_APPLY_MS. Each call becomes USB control traffic to the camera, and
+  // letting it pile up makes the camera keep moving after the button is
+  // released. A newer target simply replaces one not yet sent; the gimbal
+  // glides between targets on its own, so the motion stays smooth.
   function flush() {
     if (applying || !queued || !track) return;
+    const wait = MIN_APPLY_MS - (Date.now() - lastApplyAt);
+    if (wait > 0) {
+      if (!flushTimer) flushTimer = setTimeout(() => { flushTimer = null; flush(); }, wait);
+      return;
+    }
     const c = queued;
     queued = null;
     applying = true;
+    lastApplyAt = Date.now();
     track.applyConstraints({ advanced: [c] })
       .catch(err => console.warn('[ptz] camera refused', c, err && err.message))
       .finally(() => { applying = false; flush(); });

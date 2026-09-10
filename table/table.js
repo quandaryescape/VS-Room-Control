@@ -111,35 +111,57 @@
     const fps = Math.max(2, Math.min(opts.fps || 12, 25));
     const quality = opts.quality || 0.6;
     const maxWidth = opts.width || 960;
-    const canvas = document.createElement('canvas');
-    const g = canvas.getContext('2d');
+    let canvas = null;
+    let g = null;
     let inFlight = false;
+    let grabStartedAt = 0;
+    let warnedStall = false;
 
     // Frames also go to the GM's dashboard; only a takeover is "on their walls".
     $('onAir').hidden = !opts.onAir;
 
-    const grab = () => {
+    // Every step here is asynchronous, so the page never sits waiting on the
+    // graphics chip. The previous drawImage(video) + toBlob pair could make
+    // the page wait on a GPU readback — tolerable for a 20-second takeover,
+    // but not for a GM camera view left running all game.
+    const grab = async () => {
       // Skip rather than queue: on a slow link it is better to drop frames
       // than to build a backlog and fall behind the room.
-      if (inFlight) return;
+      if (inFlight) {
+        if (!warnedStall && Date.now() - grabStartedAt > 5000) {
+          warnedStall = true;
+          console.warn('[cam] a frame grab has been stuck for 5s — frames paused');
+        }
+        return;
+      }
       const vw = video.videoWidth;
       const vh = video.videoHeight;
       if (!vw || !vh) return;
 
       const w = Math.min(maxWidth, vw);
       const h = Math.round((vh / vw) * w);
-      if (canvas.width !== w) { canvas.width = w; canvas.height = h; }
-      g.drawImage(video, 0, 0, w, h);
-
       inFlight = true;
-      canvas.toBlob(blob => {
-        if (!blob) { inFlight = false; return; }
-        fetch('/api/camframe/' + encodeURIComponent(roomKey), {
+      grabStartedAt = Date.now();
+      try {
+        const bitmap = await createImageBitmap(video, { resizeWidth: w, resizeHeight: h, resizeQuality: 'low' });
+        if (!canvas || canvas.width !== w || canvas.height !== h) {
+          canvas = new OffscreenCanvas(w, h);
+          g = canvas.getContext('2d');
+        }
+        g.drawImage(bitmap, 0, 0);
+        bitmap.close();
+        const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality });
+        await fetch('/api/camframe/' + encodeURIComponent(roomKey), {
           method: 'POST',
           headers: { 'Content-Type': 'image/jpeg' },
           body: blob,
-        }).catch(() => {}).finally(() => { inFlight = false; });
-      }, 'image/jpeg', quality);
+        });
+      } catch (e) {
+        // A dropped frame is fine; the next tick tries again.
+      } finally {
+        inFlight = false;
+        warnedStall = false;
+      }
     };
 
     camPush = setInterval(grab, Math.round(1000 / fps));
