@@ -233,6 +233,7 @@
     socket.on('connect', () => {
       socket.emit('hello', { role: 'table', room: roomKey });
       $('linkDot').className = 'dot on';
+      onHealthConnect();
     });
 
     socket.on('disconnect', () => {
@@ -688,6 +689,74 @@
     setSteerOwn(true);
   });
   $('remoteVideo').addEventListener('click', () => { if (steerOwn) setSteerOwn(false); });
+
+  // ------------------------------------------------------------------ health
+  //
+  // A table that freezes for good can't say so — but one that stalls and
+  // recovers, or throws, can. These go to the server's event log (shown on
+  // the dashboard), the only record of what a table PC was doing when it went
+  // wrong. Reports made while disconnected wait for the reconnect.
+
+  let pendingReports = [];
+  let startupSent = false;
+
+  function report(kind, detail) {
+    if (socket && socket.connected) socket.emit('table:report', { kind, detail });
+    else if (pendingReports.length < 5) pendingReports.push({ kind, detail });
+  }
+
+  function onHealthConnect() {
+    if (!startupSent) {
+      startupSent = true;
+      report('startup', {
+        browser: (navigator.userAgent.match(/(?:Chrome|Chromium)\/[\d.]+/) || ['unknown'])[0],
+        gpu: gpuName(),
+        cores: navigator.hardwareConcurrency || null,
+        memoryGB: navigator.deviceMemory || null,
+        screen: screen.width + 'x' + screen.height + '@' + (window.devicePixelRatio || 1),
+      });
+    }
+    for (const r of pendingReports.splice(0)) report(r.kind, r.detail);
+  }
+
+  function gpuName() {
+    try {
+      const gl = document.createElement('canvas').getContext('webgl');
+      if (!gl) return 'no WebGL (software rendering?)';
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      const name = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+      const lose = gl.getExtension('WEBGL_lose_context');
+      if (lose) lose.loseContext();
+      return String(name);
+    } catch (e) { return 'unknown'; }
+  }
+
+  // A 1-second heartbeat. If it fires more than 2s late, the page was stuck
+  // for that long; say so once it can.
+  let lastBeat = performance.now();
+  setInterval(() => {
+    const now = performance.now();
+    const late = now - lastBeat - 1000;
+    lastBeat = now;
+    if (late > 2000 && document.visibilityState === 'visible') {
+      report('stall', {
+        seconds: Math.round(late / 100) / 10,
+        phase: state ? state.phase : null,
+        pushingFrames: !!camPush,
+        inGame: !!game,
+        heapMB: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1e6) : null,
+      });
+    }
+  }, 1000);
+
+  window.addEventListener('error', ev => report('error', {
+    msg: String(ev.message).slice(0, 200),
+    at: String(ev.filename || '').split('/').pop() + ':' + ev.lineno,
+  }));
+  window.addEventListener('unhandledrejection', ev => report('error', {
+    msg: String(ev.reason && (ev.reason.message || ev.reason)).slice(0, 200),
+    kind: 'promise',
+  }));
 
   // ---------------------------------------------------------------- kick off
 

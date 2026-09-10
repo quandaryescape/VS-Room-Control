@@ -656,6 +656,25 @@ io.on('connection', socket => {
     return { ok: true, stream: `/api/camstream/${encodeURIComponent(key)}.mjpg` };
   }));
 
+  // ----- table health reports -----
+  // A table reports its own trouble — a stall it recovered from, a script
+  // error, and at startup the browser and GPU it runs on — so a freeze on a
+  // table PC leaves a trace in the event log here. Startup is logged once;
+  // anything else at most every 2s per table.
+  socket.on('table:report', (p = {}) => {
+    if (socket.data.role !== 'table' || !socket.data.room) return;
+    const kind = String(p.kind || 'report').slice(0, 20);
+    const now = Date.now();
+    if (kind !== 'startup') {
+      if (now - (socket.data.lastReport || 0) < 2000) return;
+      socket.data.lastReport = now;
+    }
+    let detail = '';
+    try { detail = JSON.stringify(p.detail || {}).slice(0, 600); } catch (e) {}
+    const say = kind === 'startup' ? log.info : log.warn;
+    say(`Room ${socket.data.room} table ${kind}`, { detail });
+  });
+
   // ----- table-to-table video link health -----
   socket.on('rtc:state', requireTable((room, p) => { camControl.setLink(room, p.status); }));
 
@@ -668,11 +687,14 @@ io.on('connection', socket => {
     negotiateVideo();
   });
 
-  socket.on('disconnect', () => {
+  socket.on('disconnect', reason => {
     if (socket.data.role === 'operator') {
       for (const key of gmViewers.keys()) setGmView(key, socket.id, false);
     }
     if (socket.data.role === 'table' && socket.data.room) {
+      // "ping timeout" means the page stopped answering (hung); "transport
+      // close" means it went away (reloaded, closed, or crashed).
+      log.warn(`Room ${socket.data.room} table connection lost: ${reason}`);
       // Only mark the room offline if no other tab for that room is left
       // (a reload briefly overlaps the old and new connection).
       const remaining = io.sockets.adapter.rooms.get('table:' + socket.data.room);
