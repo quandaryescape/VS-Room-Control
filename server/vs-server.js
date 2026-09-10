@@ -533,22 +533,10 @@ camControl.onChange = () => {
   io.to('operators').emit('cam:all', camControl.all());
 };
 
-// GM camera view on the dashboard. It rides the same JPEG relay as the Wall
-// Takeover (the table pushes frames, /api/camstream serves them as MJPEG), and
-// a camera streams only while at least one dashboard has it switched on — so
-// a forgotten browser tab can't keep a table encoding frames all day.
-const GM_VIEW = { fps: 8, width: 640, quality: 0.55 };
-const gmViewers = new Map();   // roomKey -> Set(socket.id)
-
-function setGmView(roomKey, socketId, on) {
-  const viewers = gmViewers.get(roomKey) || new Set();
-  gmViewers.set(roomKey, viewers);
-  const before = viewers.size;
-  if (on) viewers.add(socketId);
-  else viewers.delete(socketId);
-  if (!before && viewers.size) engine.camWant(roomKey, 'gm', GM_VIEW);
-  if (before && !viewers.size) engine.camRelease(roomKey, 'gm');
-}
+// The dashboard has no camera picture and no steering: both are left to the
+// tables. The GM view made the tables grab camera frames continuously, and it
+// was the one feature running every time a table crashed. The GM keeps the
+// lock (see cam:lock below).
 
 function tablesOnline() {
   return Object.keys(config.rooms).filter(k => engine.room(k).tableConnected);
@@ -572,8 +560,8 @@ io.on('connection', socket => {
   socket.on('hello', ({ role, room, pin } = {}) => {
     if (role === 'operator') {
       socket.data.role = 'operator';
-      // Watching needs no PIN (it never did). Steering a camera does: the GM
-      // outranks both teams and can lock them out of their own camera.
+      // Watching needs no PIN (it never did). Locking a camera does: it can
+      // shut both teams out of their own camera.
       socket.data.gm = pinOk(pin);
       socket.join('operators');
       socket.emit('operator', engine.operatorSnapshot());
@@ -642,19 +630,15 @@ io.on('connection', socket => {
     if (typeof ack === 'function') ack(result);
   };
 
-  socket.on('cam:drive', camHandler((key, who, p) => camControl.drive(key, who, p.vector)));
-  socket.on('cam:home', camHandler((key, who) => camControl.home(key, who)));
+  const tablesOnly = { ok: false, error: 'cameras are steered from the tables' };
+  socket.on('cam:drive', camHandler((key, who, p) => (who === 'gm'
+    ? tablesOnly
+    : camControl.drive(key, who, p.vector))));
+  socket.on('cam:home', camHandler((key, who) => (who === 'gm' ? tablesOnly : camControl.home(key, who))));
   socket.on('cam:lock', camHandler((key, who, p) => (who === 'gm'
     ? camControl.setLock(key, p.lock)
     : { ok: false, error: 'only the game master can lock a camera' })));
   socket.on('cam:caps', requireTable((room, p) => { camControl.setCaps(room, p.caps, p.diag); }));
-
-  socket.on('cam:view', camHandler((key, who, p) => {
-    if (who !== 'gm') return { ok: false, error: 'only the game master can open a camera view' };
-    if (!engine.room(key)) return { ok: false, error: 'unknown room' };
-    setGmView(key, socket.id, !!p.on);
-    return { ok: true, stream: `/api/camstream/${encodeURIComponent(key)}.mjpg` };
-  }));
 
   // ----- table health reports -----
   // A table reports its own trouble — a stall it recovered from, a script
@@ -688,9 +672,6 @@ io.on('connection', socket => {
   });
 
   socket.on('disconnect', reason => {
-    if (socket.data.role === 'operator') {
-      for (const key of gmViewers.keys()) setGmView(key, socket.id, false);
-    }
     if (socket.data.role === 'table' && socket.data.room) {
       // "ping timeout" means the page stopped answering (hung); "transport
       // close" means it went away (reloaded, closed, or crashed).

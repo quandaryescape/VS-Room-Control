@@ -168,22 +168,25 @@
 
   // ---------------------------------------------------------------- cameras
   //
-  // Built once and then updated in place, unlike the room cards: those are
-  // rebuilt every second, and a hold-to-steer button that is replaced mid-press
-  // never hears the mouse come back up.
+  // Status and the lock only. Steering and the live picture are left to the
+  // tables: the dashboard's camera view made the tables grab frames non-stop,
+  // and it was the one feature running every time a table crashed.
+  //
+  // Built once and then updated in place, unlike the room cards, so the
+  // once-a-second repaint never replaces a lock button mid-click.
 
   let cams = null;
   let camDeniedAt = 0;
+  // 'gm' is the config value for "nobody may steer"; the GM no longer steers.
   const LOCKS = [
     ['open', 'Both teams'],
     ['owner', 'Own team only'],
-    ['gm', 'GM only'],
+    ['gm', 'Nobody'],
   ];
 
   function camEmit(event, payload, onOk) {
     socket.emit(event, payload, result => {
       if (result && result.ok) { if (onOk) onOk(result); return; }
-      // Held buttons repeat several times a second; one toast is enough.
       if (Date.now() - camDeniedAt > 2500) {
         camDeniedAt = Date.now();
         toast((result && result.error) || 'camera command failed', true);
@@ -207,43 +210,8 @@
       + 'and look at chrome://media-internals → Video Capture → Pan-Tilt-Zoom on the table.';
   }
 
-  // Which cameras this dashboard is showing. Remembered in this browser, and
-  // asked for again after every reconnect, because the server forgets a
-  // dashboard's views when its connection drops.
-  const viewing = new Set((() => {
-    try { return JSON.parse(localStorage.getItem('vsCamView') || '[]'); } catch (e) { return []; }
-  })());
-  let viewSyncPending = true;
-
-  function saveViewing() {
-    try { localStorage.setItem('vsCamView', JSON.stringify([...viewing])); } catch (e) {}
-  }
-
-  function setView(room, on) {
-    camEmit('cam:view', { room, on }, result => {
-      if (on) viewing.add(room); else viewing.delete(room);
-      saveViewing();
-      const card = document.querySelector('[data-cam="' + CSS.escape(room) + '"]');
-      if (card) showView(card, on ? result.stream : null);
-    });
-  }
-
-  function showView(card, stream) {
-    const view = card.querySelector('.view');
-    const img = view.querySelector('img');
-    if (stream) {
-      img.src = stream + '?t=' + Date.now();   // a fresh URL, so a reconnect gets a fresh stream
-      view.hidden = false;
-    } else {
-      img.removeAttribute('src');              // drops the connection, which stops the stream
-      view.hidden = true;
-    }
-    card.querySelector('.watch').textContent = stream ? 'Hide camera' : 'Show camera';
-  }
-
   function holderText(cam) {
     if (!cam.holder) return 'nobody';
-    if (cam.holder === 'gm') return 'GM';
     if (cam.holder === 'owner') return esc(cam.name) + ' (own team)';
     return esc(cam.opponentName || 'the other room') + ' (other team)';
   }
@@ -251,9 +219,8 @@
   function camCard(key) {
     return `
     <div class="cam" data-cam="${esc(key)}">
-      <div class="view" hidden><span class="nopic">waiting for the picture…</span><img alt=""></div>
       <div class="info">
-        <div class="row"><span class="title"></span><button class="sm ghost watch">Show camera</button></div>
+        <div class="title"></div>
         <div class="label muted"></div>
         <div class="caps"></div>
         <div class="who"></div>
@@ -261,15 +228,6 @@
         <div class="why" hidden></div>
         <div class="locks">${LOCKS.map(([id, label]) =>
           `<button class="sm" data-lock="${id}">${label}</button>`).join('')}</div>
-      </div>
-      <div class="pad">
-        <button class="u" data-tilt="1" title="Tilt up">▲</button>
-        <button class="l" data-pan="-1" title="Pan left">◀</button>
-        <button class="h" data-home title="Recentre">⌂</button>
-        <button class="r" data-pan="1" title="Pan right">▶</button>
-        <button class="d" data-tilt="-1" title="Tilt down">▼</button>
-        <button class="zi" data-zoom="1" title="Zoom in">+</button>
-        <button class="zo" data-zoom="-1" title="Zoom out">−</button>
       </div>
     </div>`;
   }
@@ -284,16 +242,11 @@
       host.innerHTML = keys.map(camCard).join('');
       for (const card of host.querySelectorAll('[data-cam]')) {
         const room = card.dataset.cam;
-        VSCamPad(card.querySelector('.pad'), {
-          drive: vector => camEmit('cam:drive', { room, vector }),
-          home: () => camEmit('cam:home', { room }),
-        });
         for (const button of card.querySelectorAll('[data-lock]')) {
           button.addEventListener('click', () =>
             camEmit('cam:lock', { room, lock: button.dataset.lock },
-              () => toast(cams[room].name + ' camera: ' + button.textContent)));
+              () => toast(cams[room].name + ' camera steering: ' + button.textContent)));
         }
-        card.querySelector('.watch').addEventListener('click', () => setView(room, !viewing.has(room)));
       }
     }
 
@@ -322,11 +275,6 @@
       why.textContent = reason;
       for (const button of card.querySelectorAll('[data-lock]')) {
         button.classList.toggle('on', button.dataset.lock === cam.lock);
-      }
-      const pad = card.querySelector('.pad');
-      pad.classList.toggle('dead', !(cam.enabled && (caps.pan || caps.tilt || caps.zoom)));
-      for (const axis of ['pan', 'tilt', 'zoom']) {
-        for (const button of pad.querySelectorAll('[data-' + axis + ']')) button.hidden = !!cam.caps && !caps[axis];
       }
     }
   }
@@ -380,22 +328,13 @@
   const socket = io({ transports: ['websocket', 'polling'] });
 
   socket.on('connect', () => {
-    // The PIN rides along so the server lets this dashboard steer cameras.
+    // The PIN rides along so the server lets this dashboard lock cameras.
     socket.emit('hello', { role: 'operator', pin });
-    viewSyncPending = true;
     $('link').innerHTML = '<span class="live">● CONNECTED</span>';
   });
   socket.on('disconnect', () => { $('link').textContent = 'server unreachable'; });
   socket.on('operator', data => { snapshot = data; render(); });
-  socket.on('cam:all', data => {
-    cams = data;
-    renderCams();
-    // First status after a (re)connect: reopen whichever views were on.
-    if (viewSyncPending) {
-      viewSyncPending = false;
-      for (const room of viewing) if (cams[room]) setView(room, true);
-    }
-  });
+  socket.on('cam:all', data => { cams = data; renderCams(); });
 
   api('/api/catalog').then(data => { catalog = data; render(); }).catch(() => {});
   pollLog();

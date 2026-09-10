@@ -168,38 +168,26 @@ in the corner and the feed swaps to it, so the arrows steer yours. Tap the
 corner again, or leave it alone for 15 seconds, to swap back. Hold an arrow to
 move, **+** / **−** to zoom, and **⌂** to go back to the home position.
 
-**Who wins.** When two people steer the same camera, the higher rank wins:
-
-| Rank | Who | |
-|---|---|---|
-| 1 | Game master (operator dashboard) | always wins, and can lock the others out |
-| 2 | The team whose camera it is | overrides the other team immediately |
-| 3 | The other team | only gets it when nobody above is using it |
+**Who wins.** When both teams steer the same camera, the team whose camera it
+is wins, straight away. The other team only gets it when the owners aren't
+using it. The GM can't steer — only lock (below).
 
 Whoever is steering keeps the camera for two seconds after they let go, so the
 other team can't slip commands in between the owners' taps. When the other
 room grabs a team's camera, that table shows a notice saying how to take it
 back.
 
-**GM lock.** The operator dashboard has a **Cameras** section with a pad for
-each camera and a three-way lock: *Both teams* (the default), *Own team only*
-(the other room is locked out), and *GM only*. Locking out someone mid-move
+**GM lock.** The operator dashboard has a **Cameras** section with a
+three-way lock for each camera: *Both teams* (the default), *Own team only*
+(the other room is locked out), and *Nobody*. Locking out someone mid-move
 stops the camera at once. The lock resets to `ptz.lock` from `config.json` when
-the server restarts. Steering from the dashboard needs the operator PIN, if
-one is set.
+the server restarts, and changing it needs the operator PIN, if one is set.
 
-**GM view.** Each camera card has a **Show camera** button that puts that
-camera's picture on the dashboard, so you can see what you're aiming at. It is
-about 8 frames a second — enough to steer by, not broadcast quality. A camera
-only streams while some dashboard has it switched on, and each browser
-remembers which views it had open. The view uses the same frame relay as the
-Wall Takeover, so the two can run at once.
-
-The table takes those frames straight from the camera track and compresses
-them on the CPU. On the tables' Intel graphics (Alder Lake-N, Mesa drivers),
-copying camera frames through the GPU several times a second crashed or hung
-Chrome within minutes. If a table's event-log line reads `frames {"path":"video"}`
-instead of `"cpu"`, its browser is using the older GPU route.
+The dashboard deliberately has **no camera picture and no steering**. An
+earlier version had both, and the live view made each table grab camera
+frames several times a second. On these tables' Intel Alder Lake-N graphics it
+was running every time a table crashed, so it was taken out. Steering from the
+dashboard went with it — there's no point aiming a camera you can't see.
 
 The card also shows which physical camera the table opened, and whether the
 *other* table is receiving it (live / connecting… / no signal) — the quickest
